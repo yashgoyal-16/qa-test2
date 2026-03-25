@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User ID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional) - User display name
+    //   - role: string (required) - 'admin' or 'user'
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: reports
+    // Document ID: {reportId}
+    // Fields:
+    //   - userId: string (required) - ID of the user who generated the report
+    //   - agentName: string (required) - Name of the agent evaluated
+    //   - callId: string (required) - Unique identifier for the call
+    //   - date: string (required) - Date of the call
+    //   - overall_result: string (required) - Overall grade or result
+    //   - weighted_score: number (required) - Calculated weighted score
+    //   - fatal_fail: boolean (required) - Whether the call had a fatal fail
+    //   - createdAt: timestamp (required) - Creation time
+    //   - scores: map (optional) - Individual scores
+    //   - remarks: map (optional) - Individual remarks
+    //   - summary: string (optional) - AI summary
+    //   - fatal_fail_params: list (optional) - List of fatal fail parameters
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "goyalyash1605@gmail.com" && request.auth.token.email_verified == true));
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function userIdUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+
+    function userIdNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+    
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 150 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             data.role in ['admin', 'user'] &&
+             data.createdAt is timestamp;
+    }
+    
+    function isValidReport(data) {
+      return hasRequiredFields(['userId', 'agentName', 'callId', 'date', 'overall_result', 'weighted_score', 'fatal_fail', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.agentName is string && data.agentName.size() <= 150 &&
+             data.callId is string && data.callId.size() <= 100 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.overall_result is string && data.overall_result.size() > 0 && data.overall_result.size() < 50 &&
+             data.weighted_score is number && data.weighted_score >= 0 && data.weighted_score <= 100 &&
+             data.fatal_fail is bool &&
+             data.createdAt is timestamp &&
+             (!('summary' in data) || (data.summary is string && data.summary.size() < 10000)) &&
+             (!('fatal_fail_params' in data) || (data.fatal_fail_params is list && data.fatal_fail_params.size() <= 20)) &&
+             (!('scores' in data) || (data.scores is map)) &&
+             (!('remarks' in data) || (data.remarks is map)) &&
+             (!('call_type' in data) || data.call_type == null || (data.call_type is string && data.call_type.size() <= 100)) &&
+             (!('confidence' in data) || data.confidence == null || (data.confidence is string && data.confidence.size() <= 50)) &&
+             (!('strengths' in data) || (data.strengths is list && data.strengths.size() <= 20)) &&
+             (!('improvements' in data) || (data.improvements is list && data.improvements.size() <= 20));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                    isOwner(userId) && 
+                    isValidUser(request.resource.data) && 
+                    uidUnchanged() &&
+                    ((request.resource.data.role == 'user') || isAdmin());
+                    
+      allow update: if isAuthenticated() && 
+                    isValidUser(request.resource.data) && 
+                    uidNotModified() &&
+                    ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+                    
+      allow delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isDocOwner() || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                    isValidReport(request.resource.data) && 
+                    userIdUnchanged();
+                    
+      allow update: if isAuthenticated() && 
+                    isValidReport(request.resource.data) && 
+                    userIdNotModified() &&
+                    (isDocOwner() || isAdmin());
+                    
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /settings/system_prompt {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

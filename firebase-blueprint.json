@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Call Quality Assurance tool.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The unique identifier of the user."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "The user's role."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user was created."
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "A QA report generated for a call.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who generated the report."
+        },
+        "agentName": {
+          "type": "string",
+          "description": "The name of the agent evaluated."
+        },
+        "callId": {
+          "type": "string",
+          "description": "The unique identifier for the call."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date of the call."
+        },
+        "overall_result": {
+          "type": "string",
+          "description": "The overall grade or result."
+        },
+        "weighted_score": {
+          "type": "number",
+          "description": "The calculated weighted score."
+        },
+        "fatal_fail": {
+          "type": "boolean",
+          "description": "Whether the call had a fatal fail."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the report was generated."
+        }
+      },
+      "required": ["userId", "agentName", "callId", "date", "overall_result", "weighted_score", "fatal_fail", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles."
+    },
+    "/reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/Report"
+      },
+      "description": "Stores generated QA reports."
+    }
+  }
+}

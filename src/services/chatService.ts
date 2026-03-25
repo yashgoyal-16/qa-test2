@@ -1,0 +1,214 @@
+import { GoogleGenAI, Type, FunctionDeclaration, Content } from "@google/genai";
+import { db } from "../firebase";
+import { collection, query, where, getDocs, getCountFromServer } from "firebase/firestore";
+import { getSystemPrompt, updateSystemPrompt } from "./promptManager";
+
+const apiKey = process.env.GEMINI_API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
+export interface ChatMessage {
+  role: "user" | "model";
+  text: string;
+}
+
+// Tool declarations
+const getReportAndPromptTool: FunctionDeclaration = {
+  name: "getReportAndPrompt",
+  description: "Fetch a QA report by Call ID to get the transcript, QA result, and the current system prompt.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      callId: {
+        type: Type.STRING,
+        description: "The Call ID to fetch the report for.",
+      },
+    },
+    required: ["callId"],
+  },
+};
+
+const updateSystemPromptTool: FunctionDeclaration = {
+  name: "updateSystemPrompt",
+  description: "Update the main system prompt with new rules or refinements.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      newPrompt: {
+        type: Type.STRING,
+        description: "The complete, updated system prompt.",
+      },
+    },
+    required: ["newPrompt"],
+  },
+};
+
+const getTodayStatsTool: FunctionDeclaration = {
+  name: "getTodayStats",
+  description: "Get the number of calls processed today.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
+const SYSTEM_INSTRUCTION = `You are a QA grading assistant.
+
+## When the user asks about today's stats or activity
+1. Use the 'getTodayStats' tool to fetch the number of calls processed today.
+2. Report the number to the user.
+
+## When the user gives you a Call ID
+
+1. Use the 'getReportAndPrompt' tool to pull up the call transcript, the score, and the grading rules.
+2. Read everything carefully.
+3. Ask the user: "I've reviewed the call and the score — how can I help?"
+
+Do not explain the grading. Do not flag issues. Do not suggest what might be wrong. Just wait.
+
+## When the user asks a question or points something out
+
+Answer only what they asked. If they ask why a parameter scored a certain way, explain it. If they ask to see the transcript, show it. Follow their lead.
+
+## When the user asks to change a rule
+
+1. Find the exact rule responsible — quote it word for word.
+2. Rewrite only that rule to reflect what the user wants — leave everything else exactly as it is.
+3. Show the before and after with a one-line explanation of what changed.
+4. Wait for approval before saving.
+5. Once approved, use the 'updateSystemPrompt' tool to save.
+
+## Always
+
+- Never lead the user toward a problem they didn't mention.
+- Only change what the user explicitly asks to change.
+- Never save without clear approval.
+- When something is unclear, ask — don't guess.`
+
+let chatHistory: Content[] = [];
+
+export function clearChatHistory() {
+  chatHistory = [];
+}
+
+export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) => void): Promise<void> {
+  if (!ai) throw new Error("GEMINI_API_KEY is missing.");
+
+  chatHistory.push({ role: "user", parts: [{ text: message }] });
+
+  try {
+    let response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: chatHistory,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        tools: [{ functionDeclarations: [getReportAndPromptTool, updateSystemPromptTool, getTodayStatsTool] }],
+        temperature: 0.2,
+      },
+    });
+
+    // Handle function calls
+    while (response.functionCalls && response.functionCalls.length > 0) {
+      const content = response.candidates?.[0]?.content;
+      if (!content) break;
+      
+      // Append the model's function call to history
+      chatHistory.push(content);
+
+      const functionResponses = [];
+
+      for (const call of response.functionCalls) {
+        if (call.name === "getReportAndPrompt") {
+          const callId = call.args.callId as string;
+          onUpdate({ role: "model", text: `*Fetching report for Call ID: ${callId}...*` });
+          
+          // Fetch report
+          const q = query(collection(db, "reports"), where("callId", "==", callId));
+          const querySnapshot = await getDocs(q);
+          
+          let reportData = null;
+          if (!querySnapshot.empty) {
+            reportData = querySnapshot.docs[0].data();
+          }
+          
+          // Fetch prompt
+          const currentPrompt = await getSystemPrompt();
+          
+          const toolResult = {
+            reportFound: !!reportData,
+            transcript: reportData?.transcript || "No transcript found",
+            qaResult: reportData ? {
+              overall_result: reportData.overall_result,
+              weighted_score: reportData.weighted_score,
+              scores: reportData.scores,
+              remarks: reportData.remarks
+            } : null,
+            currentSystemPrompt: currentPrompt
+          };
+
+          functionResponses.push({
+            functionResponse: {
+              name: call.name,
+              response: toolResult
+            }
+          });
+
+        } else if (call.name === "updateSystemPrompt") {
+          const newPrompt = call.args.newPrompt as string;
+          onUpdate({ role: "model", text: `*Updating system prompt in database...*` });
+          
+          await updateSystemPrompt(newPrompt);
+          
+          functionResponses.push({
+            functionResponse: {
+              name: call.name,
+              response: { success: true, message: "System prompt updated successfully." }
+            }
+          });
+        } else if (call.name === "getTodayStats") {
+          onUpdate({ role: "model", text: `*Fetching today's stats...*` });
+          const today = new Date().toISOString().split("T")[0];
+          const q = query(collection(db, "reports"), where("date", "==", today));
+          const snapshot = await getCountFromServer(q);
+          
+          functionResponses.push({
+            functionResponse: {
+              name: call.name,
+              response: { count: snapshot.data().count }
+            }
+          });
+        }
+      }
+
+      if (functionResponses.length > 0) {
+        chatHistory.push({
+          role: "user",
+          parts: functionResponses
+        });
+
+        // Call the model again with the function responses
+        response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: chatHistory,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            tools: [{ functionDeclarations: [getReportAndPromptTool, updateSystemPromptTool, getTodayStatsTool] }],
+            temperature: 0.2,
+          },
+        });
+      } else {
+        break;
+      }
+    }
+
+    if (response.text) {
+      const content = response.candidates?.[0]?.content;
+      if (content) {
+        chatHistory.push(content);
+      }
+      onUpdate({ role: "model", text: response.text });
+    }
+  } catch (error) {
+    console.error("Chat error:", error);
+    onUpdate({ role: "model", text: "Sorry, I encountered an error processing your request." });
+  }
+}
