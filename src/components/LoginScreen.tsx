@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { LogIn, ShieldCheck } from 'lucide-react';
-import { signInWithGoogle } from '../firebase';
+import { signInWithGoogle } from '../supabase';
 
 export function LoginScreen() {
   const [loading, setLoading] = useState(false);
@@ -13,15 +13,7 @@ export function LoginScreen() {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Sign-in was cancelled. Please try again.');
-      } else if (err.code === 'auth/popup-blocked') {
-        setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorized for OAuth operations. Please check Firebase settings.');
-      } else {
-        setError(err.message || 'Failed to sign in. Please try again.');
-      }
+      setError(err.message || 'Failed to sign in. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -29,7 +21,7 @@ export function LoginScreen() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden"
@@ -41,14 +33,14 @@ export function LoginScreen() {
           <h1 className="text-2xl font-bold text-white mb-2">QA Evaluator Pro</h1>
           <p className="text-indigo-100 text-sm">Sign in to access the Call Quality Assurance tool</p>
         </div>
-        
+
         <div className="p-8">
           {error && (
             <div className="bg-red-50 text-red-600 p-4 rounded-lg text-sm mb-6 border border-red-100">
               {error}
             </div>
           )}
-          
+
           <button
             onClick={handleLogin}
             disabled={loading}
@@ -80,7 +72,7 @@ export function LoginScreen() {
               </>
             )}
           </button>
-          
+
           <p className="text-center text-xs text-slate-500 mt-6">
             By signing in, you agree to our Terms of Service and Privacy Policy.
           </p>

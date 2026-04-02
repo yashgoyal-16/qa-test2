@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import { supabase } from "../supabase";
 import { CallDetails, QAResult } from "../types";
 import { Clock, Search, FileText, ChevronRight, AlertCircle } from "lucide-react";
 
@@ -10,8 +9,8 @@ interface HistoryScreenProps {
 
 interface HistoryItem {
   id: string;
-  agentName: string;
-  callId: string;
+  agent_name: string;
+  call_id: string;
   date: string;
   overall_result: string;
   weighted_score: number;
@@ -24,7 +23,7 @@ interface HistoryItem {
   confidence?: string;
   strengths?: string[];
   improvements?: string[];
-  createdAt: any;
+  created_at: string;
 }
 
 export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
@@ -35,24 +34,19 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
 
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!auth.currentUser) return;
-      
       try {
         setLoading(true);
-        const q = query(
-          collection(db, "reports"),
-          where("userId", "==", auth.currentUser.uid),
-          orderBy("createdAt", "desc")
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const fetchedReports: HistoryItem[] = [];
-        
-        querySnapshot.forEach((doc) => {
-          fetchedReports.push({ id: doc.id, ...doc.data() } as HistoryItem);
-        });
-        
-        setReports(fetchedReports);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error: fetchError } = await supabase
+          .from("reports")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (fetchError) throw fetchError;
+        setReports(data ?? []);
       } catch (err: any) {
         console.error("Error fetching history:", err);
         setError(err.message || "Failed to load audit history.");
@@ -66,10 +60,10 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
 
   const handleSelect = (item: HistoryItem) => {
     const details: CallDetails = {
-      agentName: item.agentName,
-      callId: item.callId,
+      agentName: item.agent_name,
+      callId: item.call_id,
       date: item.date,
-      file: null, // No file available for past reports
+      file: null,
     };
 
     const result: QAResult = {
@@ -92,8 +86,8 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
 
   const filteredReports = reports.filter(
     (report) =>
-      report.agentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      report.callId.toLowerCase().includes(searchTerm.toLowerCase())
+      report.agent_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      report.call_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -125,7 +119,7 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
           </h2>
           <p className="text-gray-500 text-sm mt-1">Review your past QA evaluations</p>
         </div>
-        
+
         <div className="relative w-full sm:w-64">
           <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -161,8 +155,8 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredReports.map((report) => (
-                <tr 
-                  key={report.id} 
+                <tr
+                  key={report.id}
                   onClick={() => handleSelect(report)}
                   className="hover:bg-indigo-50/50 transition-colors cursor-pointer group"
                 >
@@ -170,10 +164,10 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
                     {report.date}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">{report.agentName}</div>
+                    <div className="font-medium text-gray-900">{report.agent_name}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                    {report.callId}
+                    {report.call_id}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -189,8 +183,8 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      report.overall_result.toLowerCase().includes('pass') 
-                        ? 'bg-green-100 text-green-700' 
+                      report.overall_result.toLowerCase().includes('pass')
+                        ? 'bg-green-100 text-green-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
                       {report.overall_result}

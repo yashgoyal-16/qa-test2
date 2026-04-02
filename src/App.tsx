@@ -8,9 +8,8 @@ import { LoginScreen } from "./components/LoginScreen";
 import { CallDetails, QAResult } from "./types";
 import { transcribeAudio } from "./services/deepgram";
 import { evaluateTranscript } from "./services/gemini";
-import { auth, db, logout } from "./firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { supabase, logout } from "./supabase";
+import type { User } from "@supabase/supabase-js";
 import { LogOut, PlusCircle, History, MessageSquareText } from "lucide-react";
 
 type AppState = "upload" | "processing" | "report" | "history" | "chat";
@@ -18,7 +17,7 @@ type AppState = "upload" | "processing" | "report" | "history" | "chat";
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  
+
   const [appState, setAppState] = useState<AppState>("upload");
   const [processingStatus, setProcessingStatus] = useState<
     "transcribing" | "evaluating" | "generating" | "error"
@@ -28,25 +27,35 @@ export default function App() {
   const [qaResult, setQaResult] = useState<QAResult | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Ensure user document exists
-        try {
-          await setDoc(doc(db, "users", currentUser.uid), {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            role: "user", // Default role
-            createdAt: serverTimestamp()
-          }, { merge: true });
-        } catch (err) {
-          console.error("Error creating user profile:", err);
-        }
-      }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setIsAuthReady(true);
     });
-    return () => unsubscribe();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          try {
+            await supabase.from("users").upsert(
+              {
+                uid: currentUser.id,
+                email: currentUser.email,
+                display_name: currentUser.user_metadata?.full_name ?? null,
+                role: "user",
+              },
+              { onConflict: "uid" }
+            );
+          } catch (err) {
+            console.error("Error creating user profile:", err);
+          }
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleAnalyze = async (details: CallDetails) => {
@@ -119,13 +128,12 @@ export default function App() {
 
       setQaResult(result);
 
-      // Save report to Firestore
+      // Save report to Supabase
       try {
-        const reportId = crypto.randomUUID();
-        await setDoc(doc(db, "reports", reportId), {
-          userId: user.uid,
-          agentName: details.agentName || "Unknown Agent",
-          callId: details.callId || "Unknown Call",
+        const { error } = await supabase.from("reports").insert({
+          user_id: user.id,
+          agent_name: details.agentName || "Unknown Agent",
+          call_id: details.callId || "Unknown Call",
           date: details.date || new Date().toISOString().split("T")[0],
           transcript: transcript,
           overall_result: result.overall_result || "Unknown",
@@ -139,11 +147,10 @@ export default function App() {
           confidence: result.confidence || null,
           strengths: result.strengths || [],
           improvements: result.improvements || [],
-          createdAt: serverTimestamp()
         });
+        if (error) console.error("Error saving report:", error);
       } catch (err) {
-        console.error("Error saving report to Firestore:", err);
-        // We don't fail the whole process if saving fails, just log it
+        console.error("Error saving report to Supabase:", err);
       }
 
       setAppState("report");
@@ -196,7 +203,7 @@ export default function App() {
                 Comway QA
               </span>
             </div>
-            
+
             <nav className="hidden md:flex items-center space-x-1">
               <button
                 onClick={() => setAppState("upload")}
@@ -235,12 +242,19 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              {user.photoURL && (
-                <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
+              {user.user_metadata?.avatar_url && (
+                <img
+                  src={user.user_metadata.avatar_url}
+                  alt="Profile"
+                  className="w-8 h-8 rounded-full"
+                  referrerPolicy="no-referrer"
+                />
               )}
-              <span className="text-sm font-medium text-slate-700 hidden sm:block">{user.displayName || user.email}</span>
+              <span className="text-sm font-medium text-slate-700 hidden sm:block">
+                {user.user_metadata?.full_name || user.email}
+              </span>
             </div>
-            <button 
+            <button
               onClick={logout}
               className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               title="Sign Out"
@@ -296,9 +310,7 @@ export default function App() {
             <HistoryScreen onSelectReport={handleSelectHistoryReport} />
           )}
 
-          {appState === "chat" && (
-            <RefinementChat />
-          )}
+          {appState === "chat" && <RefinementChat />}
 
           {appState === "processing" && (
             <ProcessingScreen

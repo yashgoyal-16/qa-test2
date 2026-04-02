@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type, FunctionDeclaration, Content } from "@google/genai";
-import { db } from "../firebase";
-import { collection, query, where, getDocs, getCountFromServer } from "firebase/firestore";
+import { supabase } from "../supabase";
 import { getSystemPrompt, updateSystemPrompt } from "./promptManager";
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -110,8 +109,7 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
     while (response.functionCalls && response.functionCalls.length > 0) {
       const content = response.candidates?.[0]?.content;
       if (!content) break;
-      
-      // Append the model's function call to history
+
       chatHistory.push(content);
 
       const functionResponses = [];
@@ -120,72 +118,65 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
         if (call.name === "getReportAndPrompt") {
           const callId = call.args.callId as string;
           onUpdate({ role: "model", text: `*Fetching report for Call ID: ${callId}...*` });
-          
-          // Fetch report
-          const q = query(collection(db, "reports"), where("callId", "==", callId));
-          const querySnapshot = await getDocs(q);
-          
-          let reportData = null;
-          if (!querySnapshot.empty) {
-            reportData = querySnapshot.docs[0].data();
-          }
-          
-          // Fetch prompt
+
+          const { data } = await supabase
+            .from("reports")
+            .select("*")
+            .eq("call_id", callId)
+            .limit(1)
+            .single();
+
           const currentPrompt = await getSystemPrompt();
-          
+
           const toolResult = {
-            reportFound: !!reportData,
-            transcript: reportData?.transcript || "No transcript found",
-            qaResult: reportData ? {
-              overall_result: reportData.overall_result,
-              weighted_score: reportData.weighted_score,
-              scores: reportData.scores,
-              remarks: reportData.remarks
+            reportFound: !!data,
+            transcript: data?.transcript || "No transcript found",
+            qaResult: data ? {
+              overall_result: data.overall_result,
+              weighted_score: data.weighted_score,
+              scores: data.scores,
+              remarks: data.remarks,
             } : null,
-            currentSystemPrompt: currentPrompt
+            currentSystemPrompt: currentPrompt,
           };
 
           functionResponses.push({
-            functionResponse: {
-              name: call.name,
-              response: toolResult
-            }
+            functionResponse: { name: call.name, response: toolResult },
           });
 
         } else if (call.name === "updateSystemPrompt") {
           const newPrompt = call.args.newPrompt as string;
           onUpdate({ role: "model", text: `*Updating system prompt in database...*` });
-          
+
           await updateSystemPrompt(newPrompt);
-          
+
           functionResponses.push({
             functionResponse: {
               name: call.name,
-              response: { success: true, message: "System prompt updated successfully." }
-            }
+              response: { success: true, message: "System prompt updated successfully." },
+            },
           });
+
         } else if (call.name === "getTodayStats") {
           onUpdate({ role: "model", text: `*Fetching today's stats...*` });
           const today = new Date().toISOString().split("T")[0];
-          const q = query(collection(db, "reports"), where("date", "==", today));
-          const snapshot = await getCountFromServer(q);
-          
+          const { count } = await supabase
+            .from("reports")
+            .select("*", { count: "exact", head: true })
+            .eq("date", today);
+
           functionResponses.push({
             functionResponse: {
               name: call.name,
-              response: { count: snapshot.data().count }
-            }
+              response: { count: count ?? 0 },
+            },
           });
         }
       }
 
       if (functionResponses.length > 0) {
-        chatHistory.push({
-          role: "user",
-          parts: functionResponses
-        });
+        chatHistory.push({ role: "user", parts: functionResponses });
 
-        // Call the model again with the function responses
         response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
           contents: chatHistory,
@@ -202,9 +193,7 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
 
     if (response.text) {
       const content = response.candidates?.[0]?.content;
-      if (content) {
-        chatHistory.push(content);
-      }
+      if (content) chatHistory.push(content);
       onUpdate({ role: "model", text: response.text });
     }
   } catch (error) {

@@ -2,8 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileAudio, X, BarChart3 } from "lucide-react";
 import { CallDetails } from "../types";
-import { db } from "../firebase";
-import { collection, query, where, getCountFromServer } from "firebase/firestore";
+import { supabase } from "../supabase";
 
 interface UploadScreenProps {
   onAnalyze: (details: CallDetails) => void;
@@ -20,9 +19,11 @@ export default function UploadScreen({ onAnalyze }: UploadScreenProps) {
     const fetchTodayStats = async () => {
       try {
         const today = new Date().toISOString().split("T")[0];
-        const q = query(collection(db, "reports"), where("date", "==", today));
-        const snapshot = await getCountFromServer(q);
-        setTodayCount(snapshot.data().count);
+        const { count, error } = await supabase
+          .from("reports")
+          .select("*", { count: "exact", head: true })
+          .eq("date", today);
+        if (!error) setTodayCount(count ?? 0);
       } catch (err) {
         console.error("Error fetching today's stats:", err);
       }
@@ -35,7 +36,6 @@ export default function UploadScreen({ onAnalyze }: UploadScreenProps) {
       if (acceptedFiles.length > 0) {
         const selectedFile = acceptedFiles[0];
         setFile(selectedFile);
-        // Auto-fill call ID from filename if empty
         if (!callId) {
           const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
           setCallId(nameWithoutExt);
@@ -56,12 +56,7 @@ export default function UploadScreen({ onAnalyze }: UploadScreenProps) {
 
   const handleAnalyze = () => {
     if (!file) return;
-    onAnalyze({
-      agentName,
-      callId,
-      date,
-      file,
-    });
+    onAnalyze({ agentName, callId, date, file });
   };
 
   return (
