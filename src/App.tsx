@@ -27,9 +27,12 @@ export default function App() {
   const [qaResult, setQaResult] = useState<QAResult | null>(null);
 
   useEffect(() => {
-    // Get initial session
+    // Get initial session with timeout fallback
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setIsAuthReady(true);
+    }).catch((err) => {
+      console.error("Failed to get session:", err);
       setIsAuthReady(true);
     });
 
