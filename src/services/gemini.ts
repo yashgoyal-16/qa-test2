@@ -300,7 +300,7 @@ Inbound call where customer was already authenticated by IVR system
 
 Parameter 3 — Hold / Escalation Guidelines [3%]
 HOLD: If agent placed customer on hold — did they inform customer first and get acknowledgement? Did they check back within every 2 minutes? Dead air (working silently for 10+ seconds without informing customer) is treated as an unannounced hold.
-DEAD AIR DETECTION: The transcript contains timestamps in [MM:SS] format. To detect dead air, calculate the gap between consecutive utterances. If the agent does not speak for 10+ seconds between any two timestamps (i.e. only the customer speaks or there is silence), flag it as dead air. Report each instance with the start and end timestamps and duration.
+DEAD AIR DETECTION: The transcript contains timestamps in [MM:SS] format. Dead air means BOTH parties are silent — no one is speaking. To detect it, look for gaps of 10+ seconds between consecutive utterances where NEITHER the agent NOR the customer speaks. If the customer is speaking during the gap (e.g., explaining their issue), that is NOT dead air — it is normal conversation. Only flag true silence where both sides go quiet. Report each instance with the start and end timestamps and duration.
 ESCALATION: If customer requested a supervisor or escalation — was it granted or handled correctly? Denying escalation = score 0.
 
 Score
