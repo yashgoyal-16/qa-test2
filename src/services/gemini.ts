@@ -299,21 +299,22 @@ Inbound call where customer was already authenticated by IVR system
 
 
 Parameter 3 — Hold / Escalation Guidelines [3%]
-HOLD: If agent placed customer on hold — did they inform customer first and get acknowledgement? Did they check back within every 2 minutes? Dead air (working silently for 15+ seconds without informing customer) is treated as an unannounced hold.
+HOLD: If agent placed customer on hold — did they inform customer first and get acknowledgement? Did they check back within every 2 minutes? Dead air (working silently for 10+ seconds without informing customer) is treated as an unannounced hold.
+DEAD AIR DETECTION: The transcript contains timestamps in [MM:SS] format. To detect dead air, calculate the gap between consecutive utterances. If the agent does not speak for 10+ seconds between any two timestamps (i.e. only the customer speaks or there is silence), flag it as dead air. Report each instance with the start and end timestamps and duration.
 ESCALATION: If customer requested a supervisor or escalation — was it granted or handled correctly? Denying escalation = score 0.
 
 Score
 Criteria
 100
-Hold informed + permission taken + checked back on time. OR escalation handled correctly
+Hold informed + permission taken + checked back on time. OR escalation handled correctly. No dead air detected.
 75
-Hold informed but check-back was late (over 2 min but under 3 min). Minor lapse only
+Hold informed but check-back was late (over 2 min but under 3 min). OR one instance of dead air between 10-15 seconds.
 50
-Hold taken without informing customer. OR dead air over 15 seconds without explanation
+Hold taken without informing customer. OR dead air over 15 seconds without explanation.
 0
-Customer left on hold silently for extended period. OR escalation request denied
+Customer left on hold silently for extended period. OR escalation request denied. OR multiple dead air instances over 15 seconds.
 NA
-No hold and no escalation request in this call
+No hold, no escalation request, and no dead air in this call
 
 
 Parameter 4 — Courtesy and Professionalism [3%] [FATAL]
@@ -502,7 +503,7 @@ Required JSON structure:
   "remarks": {
     "1": "[DEDUCTION] Agent greeted with company name but did not offer further assistance before closing.",
     "2": "[OBSERVATION] Verified account ID and mobile number correctly before accessing account.",
-    "3": "NA - No hold or escalation in this call.",
+    "3": "[OBSERVATION] Dead air detected: 13 seconds of silence between [00:22] and [00:35] while agent checked account without informing customer.",
     "4": "[OBSERVATION] Professional and calm throughout despite customer frustration.",
     "5": "[DEDUCTION] Interrupted customer twice while they were explaining the issue.",
     "6": "[DEDUCTION] Sounded hesitant and used filler words (umm, basically) multiple times.",
@@ -523,6 +524,9 @@ Required JSON structure:
     "Must verify plan prices before quoting — Super 200 pricing changed Feb 2024",
     "Always ask for alternate number on complaint calls",
     "Use customer name during the call, not just at opening"
+  ],
+  "dead_air_instances": [
+    {"start": "00:22", "end": "00:35", "duration_seconds": 13, "context": "Agent went silent after checking account, no hold announcement"}
   ]
 }
 
