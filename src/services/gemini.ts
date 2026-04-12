@@ -611,6 +611,39 @@ async function callGeminiWithRetry(
   throw new Error("All Gemini models failed after retries");
 }
 
+async function callOpenRouterFallback(
+  systemPrompt: string,
+  transcript: string,
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is missing for fallback.");
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "anthropic/claude-sonnet-4",
+      messages: [
+        { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no preamble." },
+        { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
+      ],
+      temperature: 0,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter API error (${response.status}): ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Empty response from OpenRouter");
+  return text;
+}
+
 export async function evaluateTranscript(
   transcript: string,
 ): Promise<QAResult> {
@@ -621,14 +654,21 @@ export async function evaluateTranscript(
 
   const ai = new GoogleGenAI({ apiKey });
   const dynamicSystemPrompt = await getSystemPrompt();
-  const text = await callGeminiWithRetry(ai, dynamicSystemPrompt, transcript);
+
+  let text: string;
+  try {
+    text = await callGeminiWithRetry(ai, dynamicSystemPrompt, transcript);
+  } catch (geminiErr) {
+    console.warn("All Gemini models failed, falling back to OpenRouter (Claude):", geminiErr);
+    text = await callOpenRouterFallback(dynamicSystemPrompt, transcript);
+  }
 
   try {
-    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     const result = JSON.parse(cleanText);
     return result as QAResult;
   } catch (err) {
-    console.error("Raw Gemini response:", text);
-    throw new Error("Failed to parse Gemini response as JSON");
+    console.error("Raw response:", text);
+    throw new Error("Failed to parse response as JSON");
   }
 }
