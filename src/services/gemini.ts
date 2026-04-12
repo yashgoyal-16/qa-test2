@@ -565,58 +565,32 @@ Call was very brief, cut off early, or too ambiguous to score several parameters
 FINAL REMINDER: Score only what is in the transcript. Do not assume the agent did something if it is not evidenced. Do not penalise for things that were outside the agent's control (e.g. customer hung up before agent could close). If you are unsure whether a lapse reaches a fatal threshold, default to 50 — not 0.
 `;
 
-const MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
-
-async function callGeminiWithRetry(
+async function callGemini(
   ai: GoogleGenAI,
   systemPrompt: string,
   transcript: string,
-  maxRetries = 3,
 ): Promise<string> {
-  for (const model of MODELS) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: `Evaluate this call transcript:\n\n${transcript}`,
-          config: {
-            systemInstruction: systemPrompt,
-            responseMimeType: "application/json",
-            temperature: 0,
-          },
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("Empty response from Gemini");
-        return text;
-      } catch (err: any) {
-        const status = err?.status || err?.httpStatusCode;
-        const isRetryable = status === 503 || status === 429 || status === 500;
-
-        if (isRetryable && attempt < maxRetries) {
-          const delay = Math.min(1000 * 2 ** (attempt - 1), 8000);
-          console.warn(`${model} attempt ${attempt} failed (${status}), retrying in ${delay}ms...`);
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-
-        if (isRetryable && model !== MODELS[MODELS.length - 1]) {
-          console.warn(`${model} exhausted retries, falling back to next model...`);
-          break;
-        }
-        throw err;
-      }
-    }
-  }
-  throw new Error("All Gemini models failed after retries");
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: `Evaluate this call transcript:\n\n${transcript}`,
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      temperature: 0,
+    },
+  });
+  const text = response.text;
+  if (!text) throw new Error("Empty response from Gemini");
+  return text;
 }
 
-async function callOpenRouterFallback(
+async function callOpenRouter(
   systemPrompt: string,
   transcript: string,
+  model: string,
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is missing for fallback.");
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is missing.");
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -625,7 +599,7 @@ async function callOpenRouterFallback(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "anthropic/claude-sonnet-4",
+      model,
       messages: [
         { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no preamble." },
         { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
@@ -635,12 +609,12 @@ async function callOpenRouterFallback(
   });
 
   if (!response.ok) {
-    throw new Error(`OpenRouter API error (${response.status}): ${await response.text()}`);
+    throw new Error(`OpenRouter ${model} error (${response.status}): ${await response.text()}`);
   }
 
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Empty response from OpenRouter");
+  if (!text) throw new Error(`Empty response from OpenRouter ${model}`);
   return text;
 }
 
@@ -655,13 +629,25 @@ export async function evaluateTranscript(
   const ai = new GoogleGenAI({ apiKey });
   const dynamicSystemPrompt = await getSystemPrompt();
 
-  let text: string;
-  try {
-    text = await callGeminiWithRetry(ai, dynamicSystemPrompt, transcript);
-  } catch (geminiErr) {
-    console.warn("All Gemini models failed, falling back to OpenRouter (Claude):", geminiErr);
-    text = await callOpenRouterFallback(dynamicSystemPrompt, transcript);
+  const fallbackChain = [
+    { name: "Gemini 3.1 Flash Lite", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
+    { name: "Claude 4.5 Sonnet", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-sonnet-4") },
+    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
+  ];
+
+  let text: string | null = null;
+  for (const { name, call } of fallbackChain) {
+    try {
+      console.log(`Trying ${name}...`);
+      text = await call();
+      console.log(`${name} succeeded.`);
+      break;
+    } catch (err) {
+      console.warn(`${name} failed:`, err);
+    }
   }
+
+  if (!text) throw new Error("All LLM providers failed.");
 
   try {
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
