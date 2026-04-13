@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { QAResult } from "../types";
 import { getSystemPrompt } from "./promptManager";
 
@@ -626,7 +626,7 @@ export async function evaluateTranscript(
     throw new Error("GEMINI_API_KEY is missing.");
   }
 
-  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 30000 } });
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 120000 } });
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
