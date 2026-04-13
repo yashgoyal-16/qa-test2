@@ -626,7 +626,7 @@ export async function evaluateTranscript(
     throw new Error("GEMINI_API_KEY is missing.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 30000 } });
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
