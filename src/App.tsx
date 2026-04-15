@@ -27,11 +27,17 @@ export default function App() {
   const [qaResult, setQaResult] = useState<QAResult | null>(null);
 
   useEffect(() => {
-    // Get initial session with timeout fallback
+    // Timeout fallback in case getSession hangs
+    const timeout = setTimeout(() => {
+      setIsAuthReady(true);
+    }, 3000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeout);
       setUser(session?.user ?? null);
       setIsAuthReady(true);
     }).catch((err) => {
+      clearTimeout(timeout);
       console.error("Failed to get session:", err);
       setIsAuthReady(true);
     });
@@ -130,33 +136,34 @@ export default function App() {
       }
 
       setQaResult(result);
-
-      // Save report to Supabase
-      try {
-        const { error } = await supabase.from("reports").insert({
-          user_id: user.id,
-          agent_name: details.agentName || "Unknown Agent",
-          call_id: details.callId || "Unknown Call",
-          date: details.date || new Date().toISOString().split("T")[0],
-          transcript: transcript,
-          overall_result: result.overall_result || "Unknown",
-          weighted_score: result.weighted_score || 0,
-          fatal_fail: result.fatal_fail || false,
-          scores: result.scores || {},
-          remarks: result.remarks || {},
-          summary: result.summary || "",
-          fatal_fail_params: result.fatal_fail_params || [],
-          call_type: result.call_type || null,
-          confidence: result.confidence || null,
-          strengths: result.strengths || [],
-          improvements: result.improvements || [],
-        });
-        if (error) console.error("Error saving report:", error);
-      } catch (err) {
-        console.error("Error saving report to Supabase:", err);
-      }
-
       setAppState("report");
+
+      // Save report to Supabase in background (non-blocking)
+      (async () => {
+        try {
+          const { error } = await supabase.from("reports").insert({
+            user_id: user.id,
+            agent_name: details.agentName || "Unknown Agent",
+            call_id: details.callId || "Unknown Call",
+            date: details.date || new Date().toISOString().split("T")[0],
+            transcript: transcript,
+            overall_result: result.overall_result || "Unknown",
+            weighted_score: result.weighted_score || 0,
+            fatal_fail: result.fatal_fail || false,
+            scores: result.scores || {},
+            remarks: result.remarks || {},
+            summary: result.summary || "",
+            fatal_fail_params: result.fatal_fail_params || [],
+            call_type: result.call_type || null,
+            confidence: result.confidence || null,
+            strengths: result.strengths || [],
+            improvements: result.improvements || [],
+          });
+          if (error) console.error("Error saving report:", error);
+        } catch (err) {
+          console.error("Error saving report to Supabase:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Analysis failed:", error);
       setProcessingStatus("error");
