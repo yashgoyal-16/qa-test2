@@ -85,6 +85,14 @@ export default function App() {
       // Step 3: Generate Report
       setProcessingStatus("generating");
 
+      // Validate result structure
+      if (!result.scores || typeof result.scores !== "object") {
+        result.scores = {};
+      }
+      if (!result.remarks || typeof result.remarks !== "object") {
+        result.remarks = {};
+      }
+
       // Recalculate score to ensure accuracy (LLMs can be bad at math)
       const weights: Record<string, number> = {
         "1": 3,

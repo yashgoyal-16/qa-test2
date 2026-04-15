@@ -13,14 +13,28 @@ export async function transcribeAudio(file: File): Promise<string> {
   url.searchParams.append("diarize", "true");
   url.searchParams.append("utterances", "true");
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiKey}`,
-      "Content-Type": file.type || "audio/wav",
-    },
-    body: file,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": file.type || "audio/wav",
+      },
+      body: file,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error("Transcription timed out. The audio file may be too large. Please try a shorter recording.");
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorText = await response.text();
