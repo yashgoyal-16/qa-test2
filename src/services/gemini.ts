@@ -571,7 +571,7 @@ async function callGemini(
   transcript: string,
 ): Promise<string> {
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-flash-lite-preview",
+    model: "gemini-3.1-pro-preview",
     contents: `Evaluate this call transcript:\n\n${transcript}`,
     config: {
       systemInstruction: systemPrompt,
@@ -632,7 +632,7 @@ export async function evaluateTranscript(
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
-    { name: "Gemini 3.1 Flash Lite", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
+    { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
     { name: "Claude 4.5 Haiku", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4") },
     { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
   ];
