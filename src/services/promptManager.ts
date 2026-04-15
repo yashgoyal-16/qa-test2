@@ -3,19 +3,22 @@ import { SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT } from "./gemini";
 
 export async function getSystemPrompt(): Promise<string> {
   try {
-    const { data, error } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", "system_prompt")
-      .single();
+    const result = await Promise.race([
+      supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "system_prompt")
+        .single(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Supabase timeout")), 5000)
+      ),
+    ]);
 
-    if (error || !data) {
-      return DEFAULT_SYSTEM_PROMPT;
-    }
-
+    const { data, error } = result as any;
+    if (error || !data) return DEFAULT_SYSTEM_PROMPT;
     return data.value;
   } catch (error) {
-    console.error("Error fetching system prompt:", error);
+    console.error("Error fetching system prompt, using default:", error);
     return DEFAULT_SYSTEM_PROMPT;
   }
 }
