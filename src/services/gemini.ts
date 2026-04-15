@@ -633,7 +633,7 @@ export async function evaluateTranscript(
 
   const fallbackChain = [
     { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
-    { name: "Claude 4.5 Haiku", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4") },
+    { name: "Claude Haiku 4.5", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4.5") },
     { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
   ];
 
