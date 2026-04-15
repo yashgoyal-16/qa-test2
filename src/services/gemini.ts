@@ -632,8 +632,8 @@ export async function evaluateTranscript(
 
   const fallbackChain = [
     { name: "Gemini 3.1 Flash Lite", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
-    { name: "Claude 4.5 Sonnet", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-sonnet-4") },
-    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
+    { name: "Claude 4.5 Haiku", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4") },
+    { name: "OpenAI GPT-4o-mini", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o-mini") },
   ];
 
   let text: string | null = null;
