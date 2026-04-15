@@ -569,9 +569,10 @@ async function callGemini(
   ai: GoogleGenAI,
   systemPrompt: string,
   transcript: string,
+  model: string,
 ): Promise<string> {
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
+    model,
     contents: `Evaluate this call transcript:\n\n${transcript}`,
     config: {
       systemInstruction: systemPrompt,
@@ -632,8 +633,10 @@ export async function evaluateTranscript(
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
-    { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
-    { name: "Claude Haiku 4.5", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4.5") },
+    { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
+    { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
+    { name: "Gemini 2.5 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-flash") },
+    { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
     { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
   ];
 
