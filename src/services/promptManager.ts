@@ -10,11 +10,6 @@ export async function getSystemPrompt(): Promise<string> {
       .single();
 
     if (error || !data) {
-      // Initialize with default if it doesn't exist
-      await supabase.from("settings").upsert({
-        key: "system_prompt",
-        value: DEFAULT_SYSTEM_PROMPT,
-      });
       return DEFAULT_SYSTEM_PROMPT;
     }
 
