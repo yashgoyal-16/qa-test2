@@ -33,9 +33,15 @@ export default function ReportScreen({
       const originalWidth = el.style.width;
       el.style.width = "1200px";
 
+      // Clone the element to avoid mutating the live DOM
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.style.width = "1200px";
+      clone.style.position = "absolute";
+      clone.style.left = "-9999px";
+      document.body.appendChild(clone);
+
       // Convert oklch colors to rgb for html2canvas compatibility
-      const allElements = el.querySelectorAll("*");
-      allElements.forEach((node: Element) => {
+      clone.querySelectorAll("*").forEach((node: Element) => {
         const computed = getComputedStyle(node);
         const htmlNode = node as HTMLElement;
         if (computed.color) htmlNode.style.color = computed.color;
@@ -44,15 +50,14 @@ export default function ReportScreen({
         if (computed.borderColor) htmlNode.style.borderColor = computed.borderColor;
       });
 
-      const canvas = await html2canvas(el, {
+      const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
         logging: false,
-        scrollY: -window.scrollY,
         windowWidth: 1200,
       });
 
-      // Restore original width
+      document.body.removeChild(clone);
       el.style.width = originalWidth;
 
       const imgData = canvas.toDataURL("image/png");
@@ -170,7 +175,7 @@ export default function ReportScreen({
                 Final Score
               </p>
               <p className="text-4xl font-bold text-slate-900">
-                {result.weighted_score.toFixed(1)}%
+                {(result.weighted_score ?? 0).toFixed(1)}%
               </p>
             </div>
             <div className="h-12 w-px bg-slate-200"></div>
@@ -217,7 +222,7 @@ export default function ReportScreen({
                 <CheckCircle className="w-5 h-5 mr-2" /> Strengths
               </h4>
               <ul className="space-y-2">
-                {result.strengths.map((s, i) => (
+                {(result.strengths || []).map((s, i) => (
                   <li key={i} className="flex items-start">
                     <span className="text-emerald-500 mr-2">•</span>
                     <span className="text-slate-700 text-sm">{s}</span>
@@ -230,7 +235,7 @@ export default function ReportScreen({
                 <AlertTriangle className="w-5 h-5 mr-2" /> Areas to Improve
               </h4>
               <ul className="space-y-2">
-                {result.improvements.map((s, i) => (
+                {(result.improvements || []).map((s, i) => (
                   <li key={i} className="flex items-start">
                     <span className="text-orange-500 mr-2">•</span>
                     <span className="text-slate-700 text-sm">{s}</span>

@@ -607,6 +607,7 @@ async function callOpenRouter(
       temperature: 0,
       max_tokens: 4096,
     }),
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!response.ok) {

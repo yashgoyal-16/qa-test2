@@ -172,7 +172,7 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-900">
-                        {report.weighted_score.toFixed(1)}%
+                        {(report.weighted_score ?? 0).toFixed(1)}%
                       </span>
                       {report.fatal_fail && (
                         <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium">
@@ -183,9 +183,13 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      report.overall_result.toLowerCase().includes('pass')
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
+                      report.overall_result === 'FAIL'
+                        ? 'bg-red-100 text-red-700'
+                        : report.overall_result === 'Poor' || report.overall_result === 'Below Average'
+                        ? 'bg-orange-100 text-orange-700'
+                        : report.overall_result === 'Average'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-green-100 text-green-700'
                     }`}>
                       {report.overall_result}
                     </span>
