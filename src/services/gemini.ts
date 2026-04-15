@@ -605,6 +605,7 @@ async function callOpenRouter(
         { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
       ],
       temperature: 0,
+      max_tokens: 4096,
     }),
   });
 

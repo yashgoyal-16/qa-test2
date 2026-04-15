@@ -27,7 +27,19 @@ export default function ReportScreen({
     if (!reportRef.current) return;
 
     try {
-      const canvas = await html2canvas(reportRef.current, {
+      // Convert oklch colors to rgb for html2canvas compatibility
+      const el = reportRef.current;
+      const allElements = el.querySelectorAll("*");
+      allElements.forEach((node: Element) => {
+        const computed = getComputedStyle(node);
+        const htmlNode = node as HTMLElement;
+        if (computed.color) htmlNode.style.color = computed.color;
+        if (computed.backgroundColor && computed.backgroundColor !== "rgba(0, 0, 0, 0)")
+          htmlNode.style.backgroundColor = computed.backgroundColor;
+        if (computed.borderColor) htmlNode.style.borderColor = computed.borderColor;
+      });
+
+      const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         logging: false,
