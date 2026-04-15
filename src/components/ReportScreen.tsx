@@ -27,8 +27,13 @@ export default function ReportScreen({
     if (!reportRef.current) return;
 
     try {
-      // Convert oklch colors to rgb for html2canvas compatibility
       const el = reportRef.current;
+
+      // Force a minimum width so remarks column isn't truncated
+      const originalWidth = el.style.width;
+      el.style.width = "1200px";
+
+      // Convert oklch colors to rgb for html2canvas compatibility
       const allElements = el.querySelectorAll("*");
       allElements.forEach((node: Element) => {
         const computed = getComputedStyle(node);
@@ -44,14 +49,26 @@ export default function ReportScreen({
         useCORS: true,
         logging: false,
         scrollY: -window.scrollY,
+        windowWidth: 1200,
       });
+
+      // Restore original width
+      el.style.width = originalWidth;
 
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      // Multi-page support
+      let position = 0;
+      while (position < pdfHeight) {
+        if (position > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, -position, pdfWidth, pdfHeight);
+        position += pageHeight;
+      }
+
       pdf.save(`QA_Report_${details.callId || "Call"}.pdf`);
     } catch (error) {
       console.error("Failed to generate PDF", error);
