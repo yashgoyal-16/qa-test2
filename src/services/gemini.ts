@@ -627,16 +627,13 @@ export async function evaluateTranscript(
     throw new Error("GEMINI_API_KEY is missing.");
   }
 
-  console.log("evaluateTranscript: starting...");
   const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 120000 } });
-  console.log("evaluateTranscript: fetching system prompt...");
   const dynamicSystemPrompt = await getSystemPrompt();
-  console.log("evaluateTranscript: system prompt loaded, starting LLM chain...");
 
   const fallbackChain = [
     { name: "Gemini 3.1 Flash Lite", call: () => callGemini(ai, dynamicSystemPrompt, transcript) },
     { name: "Claude 4.5 Haiku", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "anthropic/claude-haiku-4") },
-    { name: "OpenAI GPT-4o-mini", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o-mini") },
+    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
   ];
 
   let text: string | null = null;
