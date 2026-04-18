@@ -60,6 +60,18 @@ ARG Basic 50Q
 3 months
 Rs. 1,696
 Varies
+
+Fusionnet Basic 70M
+70 Mbps
+Monthly
+Rs. 589/month
+Varies
+Fusionnet Basic 70Q
+70 Mbps
+3 months
+Rs. 1,696
+Varies
+NOTE: The Rs. 589 plan is 50 Mbps on Comway/ARG but 70 Mbps on Fusionnet. Verify the brand before flagging a speed error.
 Comway 30K (Kanpur)
 30 Mbps
 Monthly
@@ -283,13 +295,14 @@ Parameter 2 — Customer Identification / Verification [8%] [FATAL]
 Did the agent verify the customer's identity before accessing or acting on the account?
 Acceptable verification = registered mobile number + one of: account ID, name, address (2-step verification).
 FATAL THRESHOLD: Score 0 only if agent took account actions (pulled up account, raised ticket, gave account info) with ZERO verification. Partial verification (one detail only) = 50, not Fatal.
+FOLLOW-UP CALL EXCEPTION: On follow-up calls where the customer references an existing ticket number or the agent pulls up the account using the calling number and confirms the customer's name, this counts as adequate verification (score 75 minimum). Do NOT score 0 for follow-up calls where the customer is clearly the account holder based on context.
 
 Score
 Criteria
 100
 Full 2-step verification completed BEFORE any account action
 75
-Full verification done but AFTER starting to help (slight order lapse)
+Full verification done but AFTER starting to help (slight order lapse). OR follow-up call with caller number match + name confirmation.
 50
 Only one verification detail collected (e.g. name only, no mobile/account ID)
 0 — FATAL
@@ -335,15 +348,17 @@ Rude, dismissive, argued with customer, or used disrespectful language
 
 Parameter 5 — Attentiveness and Patience [5%]
 Did the agent actively listen without interrupting? Did they stay calm with a frustrated/hyper customer? Did they respond to what the customer actually said, or give generic scripted replies?
+SUMMARIZATION CHECK: Before moving to resolution, did the agent briefly confirm their understanding of the customer's issue? (e.g. 'So your internet has been down since this morning and you have already restarted the router, correct?'). Jumping directly from the customer's complaint to a solution without any confirmation counts as one attentiveness lapse.
+INTERRUPTION CHECK: Flag each instance where the agent interrupted the customer mid-sentence with the timestamp. Two or more interruptions = score 50 max.
 
 Score
 Criteria
 100
-Patient and attentive throughout — no interruptions, responded to customer specifically
+Patient and attentive throughout — no interruptions, responded to customer specifically, and confirmed understanding before resolving
 75
-Mostly attentive — one minor interruption or one moment of not fully registering customer's point
+Mostly attentive — one minor interruption or one moment of not fully registering customer's point. OR did not summarise/confirm but otherwise attentive.
 50
-Some impatience, multiple interruptions, or gave scripted reply ignoring what customer said
+Some impatience, multiple interruptions, or gave scripted reply ignoring what customer said. OR no summarisation AND one interruption.
 0
 Clearly distracted, dismissive, or lost patience with the customer
 
@@ -366,18 +381,20 @@ Fumbling throughout, no ownership of the call, unable to string together coheren
 
 Parameter 7 — Rapport Building [10%]
 Did the agent treat the customer as an individual, not a ticket number? Three components:
-PERSONALISATION: Used customer's name at least once during the call (not just at opening)
+PERSONALISATION: Used customer's CORRECT name at least once during the call (not just at opening). If the customer provides their name at any point (even via email address), the agent must start using it. Using the WRONG name (e.g. calling Mr. Shukla as Mr. Chiranjeev) is worse than not using a name at all — score 0 on this sub-component.
 LANGUAGE ADAPTATION: Matched the customer's language style (Hindi / English / Hinglish mix). Switched language if customer switched.
-ACKNOWLEDGEMENT: Genuinely acknowledged the customer's specific situation (e.g. 'I understand you've been waiting since yesterday, that must be frustrating') — not just scripted empathy
+ACKNOWLEDGEMENT: Genuinely acknowledged the customer's SPECIFIC situation — must reference something the customer actually said. A canned/scripted phrase like 'I understand your concern' or 'asuvidhaa ke liye maafi' with NO reference to the customer's specific problem does NOT count as genuine acknowledgement — score 0 on this sub-component.
+PASS example: 'I understand your internet has been down since morning and you are working from home — that is really urgent.'
+FAIL example: 'I understand the inconvenience.' / 'Mujhe khed hai aapko asuvidhaa hui.' (generic, no specifics)
 
 Score
 Criteria
 100
-All three: used name, matched language, genuinely acknowledged situation
+All three: used CORRECT name beyond opening, matched language, genuinely acknowledged specific situation
 75
-Two of three present — e.g. used name and matched language but acknowledgement was scripted
+Two of three present. NOTE: scripted/canned empathy counts as 0 on acknowledgement sub-component, not as present.
 50
-Only one present — mostly robotic/scripted, minimal personalisation
+Only one present — mostly robotic/scripted, minimal personalisation. OR agent used the WRONG customer name.
 0
 Completely transactional — no name used, no language adaptation, no acknowledgement
 
@@ -387,16 +404,21 @@ Evaluate four sub-components:
 INSTANT APOLOGY: Did agent apologise immediately when customer reported a problem? (Not after 2 minutes — at the first acknowledgement of the issue)
 ACTIVE LISTENING SIGNALS: Did agent acknowledge what customer said? (e.g. 'I understand', 'I can see that', repeating back key details, not just saying 'hmm')
 CORRECT TERMINOLOGY: Did agent say 'complaint' not 'request' for fault tickets? Correct Hindi usage (e.g. 'shubh naam' not 'subh naam')? No grammatically wrong Hindi/English sentences?
+PRONUNCIATION: Did the agent mispronounce common words, customer names, plan names, or company names? (e.g. saying 'custommer' instead of 'customer', mispronouncing the customer's name). Each mispronunciation counts as a sub-component lapse.
 TONE CONTROL: Appropriate pace — not rushing, not too slow. No excessive filler words. No yawning or coughing without muting.
+LANGUAGE QUALITY (Hinglish): Is the agent's Hindi/English mixing natural and professional?
+FAIL indicators: broken sentence structure mid-language (e.g. 'aap please kariye restart the connection ko'), excessive English filler words inserted into Hindi unnaturally, overly formal phrases that sound scripted rather than conversational, repeated robotic phrases ('theek hai theek hai theek hai', 'ok ok ok ok').
+PASS: Fluid Hinglish that matches the customer's register, or clean Hindi, or clean English — consistently.
+NOTE: A casual but clear Hinglish style is acceptable and should NOT be penalised as 'poor grammar'. Only penalise genuinely broken, robotic, or unintelligible language.
 
 Score
 Criteria
 100
-All four sub-components present and correct
+All sub-components present and correct — apology, listening, terminology, pronunciation, tone, language quality
 75
-Three of four — one minor gap (e.g. apology was slightly delayed, or one wrong term used)
+One minor gap (e.g. apology slightly delayed, or one mispronunciation, or one wrong term)
 50
-Two of four — notable gaps in one or more areas
+Two or more gaps — notable issues in terminology, pronunciation, or language quality
 0
 None present — no apology, no acknowledgement, wrong terminology, poor tone throughout
 
@@ -405,14 +427,20 @@ Parameter 9 — Complete Probing [9%]
 Did the agent ask all mandatory questions for the call type (see Section 3 checklist) before jumping to a solution? Did the agent check the account/system before making statements?
 NOTE: Refer to the call-type checklist in Section 3 for the specific probing items required. Missing mandatory items = score deduction.
 
+ADDITIONAL PROBING RULES:
+- REPETITIVE QUESTIONING: If the agent asked for the same information more than once (e.g. asked for mobile number twice, asked the same verification question in different words), treat as one missed probing item.
+- OFF-SCRIPT QUESTIONING: If the agent asked questions unrelated to the call type or standard process (e.g. invented their own qualification questions), note as [DEDUCTION].
+- EMAIL CONFIRMATION: If the agent committed to sending a follow-up or closure email, they MUST confirm the customer's email address on the call. Failure to confirm email = one missed mandatory item.
+- WALLET BALANCE: On recharge calls, if the customer has a remaining wallet balance, the agent must inform the customer of the remaining amount. Failure = one missed item.
+
 Score
 Criteria
 100
-All mandatory probing questions asked as per call type checklist. No gaps.
+All mandatory probing questions asked as per call type checklist. No gaps. No repetitive or off-script questioning.
 75
 Mostly probed — missed one non-critical item from the checklist
 50
-Missed two or more items, or skipped a critical probe (e.g. did not check for service outage before raising complaint)
+Missed two or more items, or skipped a critical probe (e.g. did not check for service outage before raising complaint), or asked repetitive questions
 0
 No probing — agent assumed the issue and jumped straight to a solution or scripted response
 
@@ -439,8 +467,9 @@ FATAL THRESHOLD: Score 0 only if agent gave a completely wrong resolution, misse
 Resolution completeness checklist (mark against call type):
 Complaint: Complaint raised (not request), correct TAT given, no-service-area checked, device restart done
 New connection: Details taken, sales team callback arranged, correct TAT communicated
-Cancellation: Retention attempted, cancellation process explained (device recovery, refund TAT)
+Cancellation: Retention attempted (agent MUST ask WHY the customer wants to cancel AND offer at least one alternative — discount, plan change, or complaint resolution). Simply saying 'ok I will process it' without any save-the-sale attempt = max P11 score 75. Cancellation process explained (device recovery, refund TAT).
 Plan/recharge: Correct plan and amount given, steps guided, plan added if applicable
+Follow-up/Refund: Check existing ticket status, provide concrete updated ETA or refund TAT, confirm next steps clearly
 
 Score
 Criteria
@@ -456,7 +485,8 @@ Wrong resolution given. OR no resolution at all. OR agent misidentified the issu
 
 Parameter 12 — Providing Alternate / Additional Information [3%]
 Did the agent proactively share information the customer did not ask for but would benefit from? Examples: informing about Playbox TV bundle, upcoming plan changes, self-service recharge steps, OTT offers, or relevant plan upgrades.
-NA is appropriate only when the call was so brief or the situation so specific that no additional info was relevant (e.g. very short follow-up call with an agitated customer).
+IPTV / PLAYBOX TV CHECK: On ALL call types (complaint, recharge, new connection, follow-up), the agent should mention IPTV or Playbox TV if the customer is on a broadband plan that supports it. Not mentioning IPTV when it is relevant = score 75 max, not 100.
+NA is appropriate only when the call was so brief or the situation so specific that no additional info was relevant (e.g. very short follow-up call with an agitated customer where mentioning IPTV would be inappropriate).
 
 Score
 Criteria
@@ -562,6 +592,13 @@ low
 Call was very brief, cut off early, or too ambiguous to score several parameters reliably
 
 
+CALIBRATION RULES — PREVENTING OVER-PENALISATION:
+1. SCORE FLOOR: If the agent addressed the customer's primary issue and provided a reasonable next step, the weighted score should generally be 60% or above. A score below 60% should only occur when there are genuine fatal failures (P2=0, P4=0, P10=0, or P11=0) or the agent completely failed to help the customer.
+2. PROPORTIONALITY: Minor gaps (missing alternate number, no IPTV mention, slightly delayed apology) should cost 25 points on that parameter — not push the overall score into 'Poor' range. Reserve scores of 0 and 50 for genuine failures, not accumulated minor lapses.
+3. CASUAL TONE IS NOT FATAL: A casual but clear communication style in Hinglish is normal for Indian call centres. Do NOT penalise casual tone as 'unprofessional' under P4 unless the agent was actually rude or disrespectful. Casual = 75 at worst, not 50 or 0.
+4. FOLLOW-UP CALLS: On follow-up calls, the customer often has existing context. Do not penalise the agent for not re-doing full onboarding steps (greeting script, full verification) if the call is clearly a continuation of an existing issue.
+5. SINGLE vs MULTIPLE LAPSES: One parameter having a low score should not cascade into other parameters. Score each parameter independently based on its own criteria.
+
 FINAL REMINDER: Score only what is in the transcript. Do not assume the agent did something if it is not evidenced. Do not penalise for things that were outside the agent's control (e.g. customer hung up before agent could close). If you are unsure whether a lapse reaches a fatal threshold, default to 50 — not 0.
 `;
 
@@ -635,9 +672,8 @@ export async function evaluateTranscript(
   const fallbackChain = [
     { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
     { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
-    { name: "Gemini 2.5 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-flash") },
-    { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
     { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
+    { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
   ];
 
   let text: string | null = null;
