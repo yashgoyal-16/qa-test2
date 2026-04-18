@@ -136,36 +136,40 @@ export default function App() {
 
       setQaResult(result);
 
-      // Save report to Supabase
-      try {
-        const { error } = await supabase.from("reports").insert({
-          user_id: user.id,
-          agent_name: details.agentName || "Unknown Agent",
-          call_id: details.callId || "Unknown Call",
-          date: details.date || new Date().toISOString().split("T")[0],
-          transcript: transcript,
-          overall_result: result.overall_result || "Unknown",
-          weighted_score: result.weighted_score || 0,
-          fatal_fail: result.fatal_fail || false,
-          scores: result.scores || {},
-          remarks: result.remarks || {},
-          summary: result.summary || "",
-          fatal_fail_params: result.fatal_fail_params || [],
-          call_type: result.call_type || null,
-          confidence: result.confidence || null,
-          strengths: result.strengths || [],
-          improvements: result.improvements || [],
-        });
-        if (error) {
-          console.error("[SaveReport] Error:", error.message, error.code, error.details);
-        } else {
-          console.log("[SaveReport] Report saved successfully for user:", user.id);
-        }
-      } catch (err) {
-        console.error("[SaveReport] Exception:", err);
-      }
-
+      // Show report immediately, save to Supabase in background
       setAppState("report");
+
+      // Save report to Supabase (non-blocking)
+      const saveReport = async () => {
+        try {
+          const { error } = await supabase.from("reports").insert({
+            user_id: user.id,
+            agent_name: details.agentName || "Unknown Agent",
+            call_id: details.callId || "Unknown Call",
+            date: details.date || new Date().toISOString().split("T")[0],
+            transcript: transcript,
+            overall_result: result.overall_result || "Unknown",
+            weighted_score: result.weighted_score || 0,
+            fatal_fail: result.fatal_fail || false,
+            scores: result.scores || {},
+            remarks: result.remarks || {},
+            summary: result.summary || "",
+            fatal_fail_params: result.fatal_fail_params || [],
+            call_type: result.call_type || null,
+            confidence: result.confidence || null,
+            strengths: result.strengths || [],
+            improvements: result.improvements || [],
+          });
+          if (error) {
+            console.error("[SaveReport] Error:", error.message, error.code, error.details);
+          } else {
+            console.log("[SaveReport] Report saved successfully for user:", user.id);
+          }
+        } catch (err) {
+          console.error("[SaveReport] Exception:", err);
+        }
+      };
+      saveReport();
     } catch (error: any) {
       console.error("Analysis failed:", error);
       setProcessingStatus("error");
