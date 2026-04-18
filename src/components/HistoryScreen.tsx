@@ -36,8 +36,12 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        console.log("[History] Auth user:", user?.id ?? "none", authError?.message ?? "");
+        if (!user) {
+          setError("Not logged in. Please sign in to view history.");
+          return;
+        }
 
         const { data, error: fetchError } = await supabase
           .from("reports")
@@ -45,6 +49,7 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
+        console.log("[History] Query result:", data?.length ?? 0, "rows, error:", fetchError?.message ?? "none");
         if (fetchError) throw fetchError;
         setReports(data ?? []);
       } catch (err: any) {

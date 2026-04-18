@@ -85,14 +85,6 @@ export default function App() {
       // Step 3: Generate Report
       setProcessingStatus("generating");
 
-      // Validate result structure
-      if (!result.scores || typeof result.scores !== "object") {
-        result.scores = {};
-      }
-      if (!result.remarks || typeof result.remarks !== "object") {
-        result.remarks = {};
-      }
-
       // Recalculate score to ensure accuracy (LLMs can be bad at math)
       const weights: Record<string, number> = {
         "1": 3,
@@ -144,34 +136,37 @@ export default function App() {
       }
 
       setQaResult(result);
-      setAppState("report");
 
-      // Save report to Supabase in background (non-blocking)
-      (async () => {
-        try {
-          const { error } = await supabase.from("reports").insert({
-            user_id: user.id,
-            agent_name: details.agentName || "Unknown Agent",
-            call_id: details.callId || "Unknown Call",
-            date: details.date || new Date().toISOString().split("T")[0],
-            transcript: transcript,
-            overall_result: result.overall_result || "Unknown",
-            weighted_score: result.weighted_score || 0,
-            fatal_fail: result.fatal_fail || false,
-            scores: result.scores || {},
-            remarks: result.remarks || {},
-            summary: result.summary || "",
-            fatal_fail_params: result.fatal_fail_params || [],
-            call_type: result.call_type || null,
-            confidence: result.confidence || null,
-            strengths: result.strengths || [],
-            improvements: result.improvements || [],
-          });
-          if (error) console.error("Error saving report:", error);
-        } catch (err) {
-          console.error("Error saving report to Supabase:", err);
+      // Save report to Supabase
+      try {
+        const { error } = await supabase.from("reports").insert({
+          user_id: user.id,
+          agent_name: details.agentName || "Unknown Agent",
+          call_id: details.callId || "Unknown Call",
+          date: details.date || new Date().toISOString().split("T")[0],
+          transcript: transcript,
+          overall_result: result.overall_result || "Unknown",
+          weighted_score: result.weighted_score || 0,
+          fatal_fail: result.fatal_fail || false,
+          scores: result.scores || {},
+          remarks: result.remarks || {},
+          summary: result.summary || "",
+          fatal_fail_params: result.fatal_fail_params || [],
+          call_type: result.call_type || null,
+          confidence: result.confidence || null,
+          strengths: result.strengths || [],
+          improvements: result.improvements || [],
+        });
+        if (error) {
+          console.error("[SaveReport] Error:", error.message, error.code, error.details);
+        } else {
+          console.log("[SaveReport] Report saved successfully for user:", user.id);
         }
-      })();
+      } catch (err) {
+        console.error("[SaveReport] Exception:", err);
+      }
+
+      setAppState("report");
     } catch (error: any) {
       console.error("Analysis failed:", error);
       setProcessingStatus("error");
