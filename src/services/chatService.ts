@@ -3,7 +3,16 @@ import { supabase } from "../supabase";
 import { getSystemPrompt, updateSystemPrompt } from "./promptManager";
 
 const apiKey = process.env.GEMINI_API_KEY;
+const apiKey2 = process.env.GEMINI_API_KEY2;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const ai2 = apiKey2 ? new GoogleGenAI({ apiKey: apiKey2 }) : null;
+
+const CHAT_MODELS = [
+  "gemini-3.1-pro-preview",
+  "gemini-3.1-flash-lite-preview",
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+];
 
 export interface ChatMessage {
   role: "user" | "model";
@@ -89,21 +98,44 @@ export function clearChatHistory() {
   chatHistory = [];
 }
 
+async function callChatWithFallback(
+  contents: Content[],
+  config: any,
+): Promise<any> {
+  const clients = [ai, ai2].filter(Boolean) as GoogleGenAI[];
+
+  for (const client of clients) {
+    for (const model of CHAT_MODELS) {
+      try {
+        console.log(`[Chat] Trying ${model}...`);
+        const response = await client.models.generateContent({
+          model,
+          contents,
+          config,
+        });
+        console.log(`[Chat] ${model} succeeded.`);
+        return response;
+      } catch (err) {
+        console.warn(`[Chat] ${model} failed:`, err);
+      }
+    }
+  }
+  throw new Error("All chat models failed.");
+}
+
 export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) => void): Promise<void> {
   if (!ai) throw new Error("GEMINI_API_KEY is missing.");
 
   chatHistory.push({ role: "user", parts: [{ text: message }] });
 
+  const chatConfig = {
+    systemInstruction: SYSTEM_INSTRUCTION,
+    tools: [{ functionDeclarations: [getReportAndPromptTool, updateSystemPromptTool, getTodayStatsTool] }],
+    temperature: 0.2,
+  };
+
   try {
-    let response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: chatHistory,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        tools: [{ functionDeclarations: [getReportAndPromptTool, updateSystemPromptTool, getTodayStatsTool] }],
-        temperature: 0.2,
-      },
-    });
+    let response = await callChatWithFallback(chatHistory, chatConfig);
 
     // Handle function calls
     while (response.functionCalls && response.functionCalls.length > 0) {
@@ -176,16 +208,7 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
 
       if (functionResponses.length > 0) {
         chatHistory.push({ role: "user", parts: functionResponses });
-
-        response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: chatHistory,
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            tools: [{ functionDeclarations: [getReportAndPromptTool, updateSystemPromptTool, getTodayStatsTool] }],
-            temperature: 0.2,
-          },
-        });
+        response = await callChatWithFallback(chatHistory, chatConfig);
       } else {
         break;
       }
