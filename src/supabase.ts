@@ -9,6 +9,12 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'implicit',
+    storageKey: 'sb-dbxhsozwdzcuofdqxsgc-auth-token',
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'qa-tester',
+    },
   },
 });
 

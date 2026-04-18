@@ -27,26 +27,22 @@ export default function App() {
   const [qaResult, setQaResult] = useState<QAResult | null>(null);
 
   useEffect(() => {
-    // Timeout fallback in case getSession hangs
+    // Timeout fallback in case auth hangs
     const timeout = setTimeout(() => {
+      console.warn("[Auth] Timeout — forcing auth ready");
       setIsAuthReady(true);
-    }, 3000);
+    }, 5000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      clearTimeout(timeout);
-      setUser(session?.user ?? null);
-      setIsAuthReady(true);
-    }).catch((err) => {
-      clearTimeout(timeout);
-      console.error("Failed to get session:", err);
-      setIsAuthReady(true);
-    });
-
+    // Use only onAuthStateChange to avoid lock contention with getSession
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        clearTimeout(timeout);
         const currentUser = session?.user ?? null;
         setUser(currentUser);
-        if (currentUser) {
+        setIsAuthReady(true);
+        console.log("[Auth] State change:", event, currentUser?.id ?? "no user");
+
+        if (currentUser && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
           try {
             await supabase.from("users").upsert(
               {
@@ -58,13 +54,16 @@ export default function App() {
               { onConflict: "uid" }
             );
           } catch (err) {
-            console.error("Error creating user profile:", err);
+            console.error("[Auth] Error creating user profile:", err);
           }
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleAnalyze = async (details: CallDetails) => {
