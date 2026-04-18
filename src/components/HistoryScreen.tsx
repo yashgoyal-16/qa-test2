@@ -36,12 +36,13 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        console.log("[History] Auth user:", user?.id ?? "none", authError?.message ?? "");
-        if (!user) {
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        console.log("[History] Auth session:", session?.user?.id ?? "none", authError?.message ?? "");
+        if (!session?.user) {
           setError("Not logged in. Please sign in to view history.");
           return;
         }
+        const user = session.user;
 
         const { data, error: fetchError } = await supabase
           .from("reports")

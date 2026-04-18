@@ -10,7 +10,7 @@ export async function getSystemPrompt(): Promise<string> {
         .eq("key", "system_prompt")
         .single(),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Supabase timeout")), 5000)
+        setTimeout(() => reject(new Error("Supabase timeout")), 10000)
       ),
     ]);
 
