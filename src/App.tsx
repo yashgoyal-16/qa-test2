@@ -27,22 +27,47 @@ export default function App() {
   const [qaResult, setQaResult] = useState<QAResult | null>(null);
 
   useEffect(() => {
-    // Timeout fallback in case auth hangs
-    const timeout = setTimeout(() => {
-      console.warn("[Auth] Timeout — forcing auth ready");
-      setIsAuthReady(true);
-    }, 5000);
+    let mounted = true;
 
-    // Use only onAuthStateChange to avoid lock contention with getSession
+    // Read session directly from localStorage as a fast primary path
+    // Supabase stores the session at the storageKey we configured
+    const readStoredSession = () => {
+      try {
+        const raw = localStorage.getItem("sb-dbxhsozwdzcuofdqxsgc-auth-token");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const session = parsed?.currentSession ?? parsed;
+        if (session?.user && session?.access_token) {
+          // Check expiry
+          const expiresAt = session.expires_at;
+          if (expiresAt && expiresAt * 1000 > Date.now()) {
+            return session.user as User;
+          }
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Synchronously restore user from localStorage for instant UI
+    const storedUser = readStoredSession();
+    if (storedUser) {
+      console.log("[Auth] Restored from storage:", storedUser.id);
+      setUser(storedUser);
+      setIsAuthReady(true);
+    }
+
+    // Also listen for async auth state changes (login/logout/refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        clearTimeout(timeout);
+        if (!mounted) return;
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         setIsAuthReady(true);
         console.log("[Auth] State change:", event, currentUser?.id ?? "no user");
 
-        if (currentUser && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        if (currentUser && event === "SIGNED_IN") {
           try {
             await supabase.from("users").upsert(
               {
@@ -60,10 +85,20 @@ export default function App() {
       }
     );
 
+    // Fallback timeout: if nothing fired after 2s, mark ready anyway
+    const timeout = setTimeout(() => {
+      if (mounted && !isAuthReady) {
+        console.warn("[Auth] Timeout — forcing auth ready");
+        setIsAuthReady(true);
+      }
+    }, 2000);
+
     return () => {
+      mounted = false;
       clearTimeout(timeout);
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAnalyze = async (details: CallDetails) => {

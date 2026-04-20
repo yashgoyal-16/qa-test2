@@ -36,25 +36,36 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
-        console.log("[History] Auth session:", session?.user?.id ?? "none", authError?.message ?? "");
-        if (!session?.user) {
+
+        // Read user ID directly from localStorage to avoid lock hangs
+        let userId: string | null = null;
+        try {
+          const raw = localStorage.getItem("sb-dbxhsozwdzcuofdqxsgc-auth-token");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const session = parsed?.currentSession ?? parsed;
+            userId = session?.user?.id ?? null;
+          }
+        } catch {}
+
+        console.log("[History] User from storage:", userId ?? "none");
+
+        if (!userId) {
           setError("Not logged in. Please sign in to view history.");
           return;
         }
-        const user = session.user;
 
         const { data, error: fetchError } = await supabase
           .from("reports")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .order("created_at", { ascending: false });
 
         console.log("[History] Query result:", data?.length ?? 0, "rows, error:", fetchError?.message ?? "none");
         if (fetchError) throw fetchError;
         setReports(data ?? []);
       } catch (err: any) {
-        console.error("Error fetching history:", err);
+        console.error("[History] Error:", err);
         setError(err.message || "Failed to load audit history.");
       } finally {
         setLoading(false);
