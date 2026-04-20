@@ -33,10 +33,30 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        setLoading(true);
+    let cancelled = false;
 
+    const tryFetch = async (userId: string, timeoutMs: number): Promise<any[]> => {
+      const query = supabase
+        .from("reports")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      const result = await Promise.race([
+        query,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Query timeout")), timeoutMs),
+        ),
+      ]);
+
+      const { data, error: fetchError } = result as any;
+      if (fetchError) throw fetchError;
+      return data ?? [];
+    };
+
+    const fetchHistory = async () => {
+      setLoading(true);
+      try {
         // Read user ID directly from localStorage to avoid lock hangs
         let userId: string | null = null;
         try {
@@ -51,28 +71,44 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
         console.log("[History] User from storage:", userId ?? "none");
 
         if (!userId) {
-          setError("Not logged in. Please sign in to view history.");
+          if (!cancelled) setError("Not logged in. Please sign in to view history.");
           return;
         }
 
-        const { data, error: fetchError } = await supabase
-          .from("reports")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false });
+        // Try up to 2 times with increasing timeout
+        let data: any[] = [];
+        let lastErr: any = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            console.log(`[History] Attempt ${attempt}...`);
+            data = await tryFetch(userId, attempt === 1 ? 8000 : 15000);
+            lastErr = null;
+            break;
+          } catch (err: any) {
+            console.warn(`[History] Attempt ${attempt} failed:`, err.message);
+            lastErr = err;
+          }
+        }
 
-        console.log("[History] Query result:", data?.length ?? 0, "rows, error:", fetchError?.message ?? "none");
-        if (fetchError) throw fetchError;
-        setReports(data ?? []);
+        if (cancelled) return;
+        if (lastErr) throw lastErr;
+
+        console.log("[History] Loaded", data.length, "reports");
+        setReports(data);
+        setError(null);
       } catch (err: any) {
-        console.error("[History] Error:", err);
-        setError(err.message || "Failed to load audit history.");
+        console.error("[History] Final error:", err);
+        if (!cancelled) setError(err.message || "Failed to load audit history.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchHistory();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSelect = (item: HistoryItem) => {
