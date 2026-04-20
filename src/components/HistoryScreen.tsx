@@ -31,6 +31,7 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loadingReportId, setLoadingReportId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,30 +114,72 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
     };
   }, []);
 
-  const handleSelect = (item: HistoryItem) => {
-    const details: CallDetails = {
-      agentName: item.agent_name,
-      callId: item.call_id,
-      date: item.date,
-      file: null,
-    };
+  const handleSelect = async (item: HistoryItem) => {
+    if (loadingReportId) return;
+    setLoadingReportId(item.id);
 
-    const result: QAResult = {
-      agent_evaluated: true,
-      overall_result: item.overall_result,
-      weighted_score: item.weighted_score,
-      fatal_fail: item.fatal_fail,
-      scores: item.scores || {},
-      remarks: item.remarks || {},
-      summary: item.summary || "",
-      fatal_fail_params: item.fatal_fail_params || [],
-      call_type: item.call_type,
-      confidence: item.confidence,
-      strengths: item.strengths || [],
-      improvements: item.improvements || [],
-    };
+    try {
+      // Fetch full report (including transcript) on click
+      console.log("[History] Fetching full report for:", item.id);
+      const { data, error: fetchError } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("id", item.id)
+        .single();
 
-    onSelectReport(details, result);
+      if (fetchError) throw fetchError;
+
+      const full = data ?? item;
+      const details: CallDetails = {
+        agentName: full.agent_name,
+        callId: full.call_id,
+        date: full.date,
+        file: null,
+      };
+
+      const result: QAResult = {
+        agent_evaluated: true,
+        overall_result: full.overall_result,
+        weighted_score: full.weighted_score,
+        fatal_fail: full.fatal_fail,
+        scores: full.scores || {},
+        remarks: full.remarks || {},
+        summary: full.summary || "",
+        fatal_fail_params: full.fatal_fail_params || [],
+        call_type: full.call_type,
+        confidence: full.confidence,
+        strengths: full.strengths || [],
+        improvements: full.improvements || [],
+      };
+
+      onSelectReport(details, result);
+    } catch (err: any) {
+      console.error("[History] Failed to load full report:", err);
+      // Fallback: use data already loaded in the list view
+      const details: CallDetails = {
+        agentName: item.agent_name,
+        callId: item.call_id,
+        date: item.date,
+        file: null,
+      };
+      const result: QAResult = {
+        agent_evaluated: true,
+        overall_result: item.overall_result,
+        weighted_score: item.weighted_score,
+        fatal_fail: item.fatal_fail,
+        scores: item.scores || {},
+        remarks: item.remarks || {},
+        summary: item.summary || "",
+        fatal_fail_params: item.fatal_fail_params || [],
+        call_type: item.call_type,
+        confidence: item.confidence,
+        strengths: item.strengths || [],
+        improvements: item.improvements || [],
+      };
+      onSelectReport(details, result);
+    } finally {
+      setLoadingReportId(null);
+    }
   };
 
   const filteredReports = reports.filter(
@@ -250,9 +293,15 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full">
-                      View <ChevronRight className="w-4 h-4 ml-1" />
-                    </button>
+                    {loadingReportId === report.id ? (
+                      <div className="flex items-center justify-end w-full">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                      </div>
+                    ) : (
+                      <button className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full">
+                        View <ChevronRight className="w-4 h-4 ml-1" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
