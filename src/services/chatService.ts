@@ -137,8 +137,10 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
   try {
     let response = await callChatWithFallback(chatHistory, chatConfig);
 
-    // Handle function calls
-    while (response.functionCalls && response.functionCalls.length > 0) {
+    // Handle function calls (max 5 rounds to prevent infinite loops)
+    let rounds = 0;
+    while (response.functionCalls && response.functionCalls.length > 0 && rounds < 5) {
+      rounds++;
       const content = response.candidates?.[0]?.content;
       if (!content) break;
 
@@ -214,13 +216,23 @@ export async function sendMessage(message: string, onUpdate: (msg: ChatMessage) 
       }
     }
 
+    const content = response.candidates?.[0]?.content;
+    if (content) chatHistory.push(content);
+
     if (response.text) {
-      const content = response.candidates?.[0]?.content;
-      if (content) chatHistory.push(content);
       onUpdate({ role: "model", text: response.text });
+    } else {
+      console.warn("[Chat] Empty response.text — response was:", JSON.stringify(response.candidates?.[0]));
+      onUpdate({
+        role: "model",
+        text: "I've reviewed the call and the score — how can I help?",
+      });
     }
   } catch (error) {
-    console.error("Chat error:", error);
-    onUpdate({ role: "model", text: "Sorry, I encountered an error processing your request." });
+    console.error("[Chat] Error:", error);
+    onUpdate({
+      role: "model",
+      text: `Sorry, I ran into an error: ${(error as Error).message || "unknown"}. Please try again.`,
+    });
   }
 }
