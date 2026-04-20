@@ -484,9 +484,11 @@ Wrong resolution given. OR no resolution at all. OR agent misidentified the issu
 
 
 Parameter 12 — Providing Alternate / Additional Information [3%]
-Did the agent proactively share information the customer did not ask for but would benefit from? Examples: informing about Playbox TV bundle, upcoming plan changes, self-service recharge steps, OTT offers, or relevant plan upgrades.
-IPTV / PLAYBOX TV CHECK: On ALL call types (complaint, recharge, new connection, follow-up), the agent should mention IPTV or Playbox TV if the customer is on a broadband plan that supports it. Not mentioning IPTV when it is relevant = score 75 max, not 100.
-NA is appropriate only when the call was so brief or the situation so specific that no additional info was relevant (e.g. very short follow-up call with an agitated customer where mentioning IPTV would be inappropriate).
+Did the agent proactively share information the customer did not ask for but would benefit from? Examples: upcoming plan changes, self-service recharge steps, OTT offers, or relevant plan upgrades. (IPTV / Playbox TV only applies to Fusionnet customers — see below.)
+IPTV / PLAYBOX TV CHECK: IPTV / Playbox TV promotion is ONLY applicable to Fusionnet customers, NOT Comway customers. Comway plans do not include IPTV/Playbox TV as a bundle, so not mentioning it on Comway calls is NOT a deduction.
+- If the call is a FUSIONNET call (customer on a Fusionnet plan) and the agent did not mention IPTV / Playbox TV when relevant → score 75 max.
+- If the call is a COMWAY call → do NOT penalise for not mentioning IPTV. Judge P12 on other relevant info (plan upgrades, self-service steps, upcoming offers, etc.).
+NA is appropriate only when the call was so brief or the situation so specific that no additional info was relevant (e.g. very short follow-up call with an agitated customer).
 
 Score
 Criteria
