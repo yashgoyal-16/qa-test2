@@ -37,13 +37,13 @@ export default function HistoryScreen({ onSelectReport }: HistoryScreenProps) {
     let cancelled = false;
 
     const tryFetch = async (userId: string, timeoutMs: number): Promise<any[]> => {
-      // Select only columns needed for list view - EXCLUDES transcript (huge) to avoid timeouts
+      // ULTRA-LIGHT query — only columns shown in the row (no JSON, no large fields)
       const query = supabase
         .from("reports")
-        .select("id, agent_name, call_id, date, overall_result, weighted_score, fatal_fail, fatal_fail_params, scores, remarks, summary, call_type, confidence, strengths, improvements, created_at")
+        .select("id, agent_name, call_id, date, overall_result, weighted_score, fatal_fail, created_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(50);
 
       const result = await Promise.race([
         query,
