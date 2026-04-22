@@ -8,7 +8,7 @@ export async function transcribeAudio(file: File): Promise<string> {
 
   const url = new URL("https://api.deepgram.com/v1/listen");
   url.searchParams.append("model", "nova-3");
-  url.searchParams.append("detect_language", "true");
+  url.searchParams.append("language", "multi");
   url.searchParams.append("punctuate", "true");
   url.searchParams.append("diarize", "true");
   url.searchParams.append("utterances", "true");
