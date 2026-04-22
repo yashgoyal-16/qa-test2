@@ -60,7 +60,7 @@ export default function App() {
 
     // Also listen for async auth state changes (login/logout/refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (!mounted) return;
         const currentUser = session?.user ?? null;
         setUser(currentUser);
@@ -68,19 +68,29 @@ export default function App() {
         console.log("[Auth] State change:", event, currentUser?.id ?? "no user");
 
         if (currentUser && event === "SIGNED_IN") {
-          try {
-            await supabase.from("users").upsert(
-              {
-                uid: currentUser.id,
-                email: currentUser.email,
-                display_name: currentUser.user_metadata?.full_name ?? null,
-                role: "user",
-              },
-              { onConflict: "uid" }
-            );
-          } catch (err) {
-            console.error("[Auth] Error creating user profile:", err);
-          }
+          const upsertedKey = `profile-upserted:${currentUser.id}`;
+          if (sessionStorage.getItem(upsertedKey)) return;
+          sessionStorage.setItem(upsertedKey, "1");
+
+          setTimeout(() => {
+            supabase
+              .from("users")
+              .upsert(
+                {
+                  uid: currentUser.id,
+                  email: currentUser.email,
+                  display_name: currentUser.user_metadata?.full_name ?? null,
+                  role: "user",
+                },
+                { onConflict: "uid" }
+              )
+              .then(({ error }) => {
+                if (error) {
+                  sessionStorage.removeItem(upsertedKey);
+                  console.error("[Auth] Error creating user profile:", error);
+                }
+              });
+          }, 0);
         }
       }
     );
