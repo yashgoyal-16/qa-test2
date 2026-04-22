@@ -288,8 +288,14 @@ export default function ReportScreen({
                           {param.name}
                         </div>
                         {param.isFatal && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 mt-1">
-                            FATAL
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-1 ${
+                              isFatalFail
+                                ? "bg-red-100 text-red-800"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {isFatalFail ? "FATAL" : "CRITICAL"}
                           </span>
                         )}
                       </td>
