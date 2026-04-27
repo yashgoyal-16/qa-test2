@@ -615,21 +615,40 @@ async function callGemini(
   transcript: string,
   model: string,
 ): Promise<string> {
-  const response = await ai.models.generateContent({
-    model,
-    contents: `Evaluate this call transcript:\n\n${transcript}`,
-    config: {
-      systemInstruction: systemPrompt,
-      responseMimeType: "application/json",
-      temperature: 0,
-      topP: 0.001,
-      topK: 1,
-      seed: 42,
-    } as any,
-  });
-  const text = response.text;
-  if (!text) throw new Error("Empty response from Gemini");
-  return text;
+  // Retry on 503 / UNAVAILABLE / "overloaded" — these are transient Google
+  // capacity errors that usually clear within seconds. Do NOT retry on 429
+  // (quota exhausted — needs a different key) or on auth/parse errors.
+  const RETRYABLE_DELAYS_MS = [0, 1500, 4000];
+  let lastErr: unknown;
+  for (const delay of RETRYABLE_DELAYS_MS) {
+    if (delay > 0) {
+      console.log(`[Gemini ${model}] transient error, retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: `Evaluate this call transcript:\n\n${transcript}`,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: "application/json",
+          temperature: 0,
+          topP: 0.001,
+          topK: 1,
+          seed: 42,
+        } as any,
+      });
+      const text = response.text;
+      if (!text) throw new Error("Empty response from Gemini");
+      return text;
+    } catch (err) {
+      lastErr = err;
+      const msg = String((err as Error).message || "");
+      const isTransient = /503|UNAVAILABLE|overloaded|deadline|temporar/i.test(msg);
+      if (!isTransient) throw err;
+    }
+  }
+  throw lastErr;
 }
 
 async function callOpenRouter(
@@ -668,51 +687,6 @@ async function callOpenRouter(
   return text;
 }
 
-async function callZAI(
-  systemPrompt: string,
-  transcript: string,
-  model: string,
-): Promise<string> {
-  const apiKey = process.env.ZAI_API_KEY;
-  if (!apiKey) throw new Error("ZAI_API_KEY is missing.");
-
-  // GLM-4-Flash free tier throttles requests >8K tokens to 1% concurrency,
-  // so a single >8K request still goes through but takes ~30-60s. We extend
-  // the timeout to 180s to accommodate this.
-  const response = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no preamble." },
-        { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
-      ],
-      // Z.AI GLM-4.5-Flash rejects top_p/seed (HTTP 400). Per testing,
-      // GLM-4.5-Flash is fully deterministic at temperature=0 alone —
-      // identical scores across 3 runs of the same input. So extra
-      // determinism params aren't needed.
-      temperature: 0,
-      max_tokens: 8192,
-      thinking: { type: "disabled" },
-      response_format: { type: "json_object" },
-    }),
-    signal: AbortSignal.timeout(180000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Z.AI ${model} error (${response.status}): ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error(`Empty response from Z.AI ${model}`);
-  return text;
-}
-
 export async function evaluateTranscript(
   transcript: string,
 ): Promise<QAResult> {
@@ -722,16 +696,41 @@ export async function evaluateTranscript(
   }
 
   const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 120000 } });
+  // Optional second Gemini key — each Google API key has its own quota and
+  // concurrency budget, so a 2nd key effectively doubles capacity and
+  // halves the chance of hitting 429s during peak Google-side load.
+  const apiKey2 = process.env.GEMINI_API_KEY2;
+  const ai2 = apiKey2 ? new GoogleGenAI({ apiKey: apiKey2, httpOptions: { timeout: 120000 } }) : null;
   const dynamicSystemPrompt = await getSystemPrompt();
 
-  const fallbackChain = [
-    { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
-    { name: "Gemini 2.5 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-flash") },
-    { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
-    { name: "Z.AI GLM-4.5-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.5-flash") },
-    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
-    { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
+  // Build the chain: for each model, try key1 first, then key2 if available.
+  // This way a transient 503/429 on one key falls through to the other key
+  // for the SAME model rather than degrading to a different model first.
+  const models: Array<{ id: string; label: string }> = [
+    { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash" },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
   ];
+  const fallbackChain: Array<{ name: string; call: () => Promise<string> }> = [];
+  for (const m of models) {
+    fallbackChain.push({
+      name: `${m.label} (key 1)`,
+      call: () => callGemini(ai, dynamicSystemPrompt, transcript, m.id),
+    });
+    if (ai2) {
+      fallbackChain.push({
+        name: `${m.label} (key 2)`,
+        call: () => callGemini(ai2, dynamicSystemPrompt, transcript, m.id),
+      });
+    }
+  }
+  // OpenAI GPT-4o stays in the chain as a non-Gemini option, but at the very
+  // end since OpenRouter credits are flaky on the current account.
+  fallbackChain.push({
+    name: "OpenAI GPT-4o (last resort)",
+    call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o"),
+  });
 
   let text: string | null = null;
   for (const { name, call } of fallbackChain) {
