@@ -691,9 +691,11 @@ async function callZAI(
         { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no preamble." },
         { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
       ],
+      // Z.AI GLM-4.5-Flash rejects top_p/seed (HTTP 400). Per testing,
+      // GLM-4.5-Flash is fully deterministic at temperature=0 alone —
+      // identical scores across 3 runs of the same input. So extra
+      // determinism params aren't needed.
       temperature: 0,
-      top_p: 0.001,
-      seed: 42,
       max_tokens: 8192,
       thinking: { type: "disabled" },
       response_format: { type: "json_object" },
@@ -726,9 +728,8 @@ export async function evaluateTranscript(
     { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
     { name: "Gemini 2.5 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-flash") },
     { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
-    { name: "Z.AI GLM-4.7-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.7-flash") },
-    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
     { name: "Z.AI GLM-4.5-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.5-flash") },
+    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
     { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
   ];
 
