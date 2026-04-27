@@ -620,7 +620,10 @@ async function callGemini(
       systemInstruction: systemPrompt,
       responseMimeType: "application/json",
       temperature: 0,
-    },
+      topP: 0.001,
+      topK: 1,
+      seed: 42,
+    } as any,
   });
   const text = response.text;
   if (!text) throw new Error("Empty response from Gemini");
@@ -687,6 +690,8 @@ async function callZAI(
         { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
       ],
       temperature: 0,
+      top_p: 0.001,
+      seed: 42,
       max_tokens: 8192,
       thinking: { type: "disabled" },
       response_format: { type: "json_object" },
@@ -740,8 +745,50 @@ export async function evaluateTranscript(
 
   try {
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    const result = JSON.parse(cleanText);
-    return result as QAResult;
+    const result = JSON.parse(cleanText) as QAResult;
+
+    // The model frequently hallucinates `weighted_score` (returns the same
+    // number across runs regardless of actual per-param scores). Recompute
+    // it deterministically from `result.scores` using the official weights.
+    // This is the single biggest source of run-to-run score variance.
+    const PARAM_WEIGHTS: Record<string, number> = {
+      "1": 3, "2": 8, "3": 3, "4": 3, "5": 5, "6": 3,
+      "7": 10, "8": 3, "9": 9, "10": 20, "11": 30, "12": 3,
+    };
+    if (result.scores) {
+      let totalWeight = 0;
+      let earnedWeight = 0;
+      for (const [k, v] of Object.entries(result.scores)) {
+        if (v === "NA" || v === null || v === undefined) continue;
+        const w = PARAM_WEIGHTS[k];
+        if (!w) continue;
+        const score = Number(v);
+        if (!Number.isFinite(score)) continue;
+        totalWeight += w;
+        earnedWeight += w * (score / 100);
+      }
+      const computed = totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
+      const claimed = result.weighted_score;
+      if (typeof claimed === "number" && Math.abs(claimed - computed) > 0.5) {
+        console.warn(`[evaluateTranscript] Overriding hallucinated weighted_score: model claimed ${claimed}, computed ${computed.toFixed(1)} from per-param scores.`);
+      }
+      result.weighted_score = Math.round(computed * 10) / 10;
+
+      // Recompute overall_result from the corrected weighted_score using
+      // the same thresholds as Section 6 of the prompt.
+      if (!result.fatal_fail) {
+        const s = result.weighted_score;
+        result.overall_result =
+          s >= 90 ? "Excellent" :
+          s >= 75 ? "Good" :
+          s >= 60 ? "Average" :
+          s >= 40 ? "Below Average" : "Poor";
+      } else {
+        result.overall_result = "FAIL";
+      }
+    }
+
+    return result;
   } catch (err) {
     console.error("Raw response:", text);
     throw new Error("Failed to parse response as JSON");
