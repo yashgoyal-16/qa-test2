@@ -648,7 +648,7 @@ async function callOpenRouter(
         { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
       ],
       temperature: 0,
-      max_tokens: 4096,
+      max_tokens: 2048,
     }),
     signal: AbortSignal.timeout(120000),
   });
@@ -660,6 +660,47 @@ async function callOpenRouter(
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content;
   if (!text) throw new Error(`Empty response from OpenRouter ${model}`);
+  return text;
+}
+
+async function callZAI(
+  systemPrompt: string,
+  transcript: string,
+  model: string,
+): Promise<string> {
+  const apiKey = process.env.ZAI_API_KEY;
+  if (!apiKey) throw new Error("ZAI_API_KEY is missing.");
+
+  // GLM-4-Flash free tier throttles requests >8K tokens to 1% concurrency,
+  // so a single >8K request still goes through but takes ~30-60s. We extend
+  // the timeout to 180s to accommodate this.
+  const response = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no preamble." },
+        { role: "user", content: `Evaluate this call transcript:\n\n${transcript}` },
+      ],
+      temperature: 0,
+      max_tokens: 8192,
+      thinking: { type: "disabled" },
+      response_format: { type: "json_object" },
+    }),
+    signal: AbortSignal.timeout(180000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Z.AI ${model} error (${response.status}): ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error(`Empty response from Z.AI ${model}`);
   return text;
 }
 
@@ -675,9 +716,11 @@ export async function evaluateTranscript(
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
+    { name: "Z.AI GLM-4.7-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.7-flash") },
     { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
     { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
     { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
+    { name: "Z.AI GLM-4.5-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.5-flash") },
     { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
   ];
 
