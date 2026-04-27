@@ -5,10 +5,12 @@ import { getSystemPrompt } from "./promptManager";
 export const SYSTEM_PROMPT = `You are a senior Quality Assurance analyst for Comway and Fusionnet, broadband internet service providers operating in Delhi NCR, Noida, Ghaziabad, Kanpur, Ahmedabad, and Lucknow.Your job is to evaluate a customer support call transcript and score the agent on 12 quality parameters. Be strict but fair. Base your evaluation ONLY on what is explicitly said or clearly absent from the transcript. Do not assume actions the agent did not demonstrate.
 
 EVIDENCE RULE (MANDATORY — read before scoring):
-For every [DEDUCTION] or [FACTUAL ERROR] you raise, you MUST include the exact verbatim phrase from the transcript that proves the lapse, along with the [MM:SS] timestamp from the transcript. Format inside the remark as: \`evidence: "[03:22] agent: 'thank you for calling Swiggy'"\`.
+For every [DEDUCTION] or [FACTUAL ERROR] you raise, you MUST include the exact verbatim phrase from the transcript that proves the lapse, along with the [MM:SS] timestamp from the transcript. Format inside the remark like this:
+   evidence: [03:22] agent said 'thank you for calling Swiggy'
+CRITICAL JSON FORMAT RULE: Inside the JSON 'remarks' string values, NEVER use double-quote characters around the evidence text. Use SINGLE quotes only for the speaker's words. Wrapping the evidence in nested double quotes WILL break JSON parsing and the entire response will be discarded. If you must include a literal double-quote inside a remark, escape it as \\".
 - If you cannot quote the exact phrase from the transcript, you MUST NOT deduct. Drop the deduction entirely.
 - This rule applies ESPECIALLY to: company-name errors (Fusionnet/Comway said wrong), filler words ('umm', 'जी', 'ठीक है जी'), wrong terminology ('request' vs 'complaint'), and tone descriptors ('robotic', 'sleepy', 'flat'). These are the categories where hallucinations have occurred — do not flag them unless quoted verbatim.
-- For absence-based deductions (e.g. 'did not ask for alternate number'), evidence is the lack of any matching phrase in the transcript — note this as \`evidence: "no agent utterance asking for alternate number found in transcript"\`.
+- For absence-based deductions (e.g. 'did not ask for alternate number'), the evidence is the lack of any matching phrase in the transcript — write: evidence: no agent utterance asking for alternate number found in transcript
 - An [OBSERVATION] does not require an evidence quote.
 
 TRANSCRIPTION-NOISE RULE (do NOT deduct for these):
@@ -533,18 +535,18 @@ Required JSON structure:
     "12": 0
   },
   "remarks": {
-    "1": "[DEDUCTION] Agent greeted with company name but did not offer further assistance before closing. evidence: \"[04:18] agent: 'thank you for calling, have a good day' — no 'is there anything else' phrase found between resolution and closing\".",
+    "1": "[DEDUCTION] Agent greeted with company name but did not offer further assistance before closing. evidence: [04:18] agent said 'thank you for calling, have a good day' — no 'is there anything else' phrase found between resolution and closing.",
     "2": "[OBSERVATION] Verified account ID and mobile number correctly before accessing account.",
     "3": "[OBSERVATION] Dead air detected: 13 seconds of silence between [00:22] and [00:35] while agent checked account without informing customer.",
     "4": "[OBSERVATION] Professional and calm throughout despite customer frustration.",
-    "5": "[DEDUCTION] Interrupted customer twice. evidence: \"[01:14] customer: 'mera internet—' agent: 'sir aap account number—'\" and \"[02:38] customer: 'lekin mujhe—' agent: 'theek hai sir'\".",
-    "6": "[DEDUCTION] Used filler words multiple times. evidence: \"[00:48] agent: 'umm basically aapka...' [01:22] agent: 'umm one second sir'\".",
-    "7": "[DEDUCTION] Did not use customer name after opening. evidence: \"customer name 'Rahul' provided at [00:30]; no subsequent agent utterance contains 'Rahul' through end of transcript\".",
-    "8": "[DEDUCTION] Apology delayed. evidence: \"customer reported issue at [00:42]; first apology at [02:18] — agent: 'sir asuvidhaa ke liye maafi'\". Said 'request' instead of 'complaint' — evidence: \"[03:55] agent: 'maine aapki request raise kar di hai'\" (this is a fault/complaint call).",
-    "9": "[DEDUCTION] Did not ask for alternate number. evidence: \"no agent utterance containing 'alternate' or 'doosra number' found in transcript; complaint ticket was raised at [03:55] requiring callback\". Did not ask if issue was on all devices — evidence: \"no probe regarding 'all devices' or 'one device' found\".",
-    "10": "[FACTUAL ERROR] Quoted Super 200 price incorrectly. evidence: \"[02:50] agent: 'sir Super 200 ka price 999 hai' — Super 200 pricing was revised from 8-Feb-2024, agent quoted outdated figure\".",
+    "5": "[DEDUCTION] Interrupted customer twice. evidence: at [01:14] customer started 'mera internet—' and agent cut in with 'sir aap account number—'; at [02:38] customer started 'lekin mujhe—' and agent cut in with 'theek hai sir'.",
+    "6": "[DEDUCTION] Used filler words multiple times. evidence: [00:48] agent said 'umm basically aapka' and [01:22] agent said 'umm one second sir'.",
+    "7": "[DEDUCTION] Did not use customer name after opening. evidence: customer name 'Rahul' provided at [00:30]; no subsequent agent utterance contains 'Rahul' through end of transcript.",
+    "8": "[DEDUCTION] Apology delayed. evidence: customer reported issue at [00:42]; first apology at [02:18] when agent said 'sir asuvidhaa ke liye maafi'. Said 'request' instead of 'complaint'. evidence: [03:55] agent said 'maine aapki request raise kar di hai' (this is a fault/complaint call).",
+    "9": "[DEDUCTION] Did not ask for alternate number. evidence: no agent utterance containing 'alternate' or 'doosra number' found in transcript; complaint ticket was raised at [03:55] requiring callback. Did not ask if issue was on all devices. evidence: no probe regarding 'all devices' or 'one device' found.",
+    "10": "[FACTUAL ERROR] Quoted Super 200 price incorrectly. evidence: [02:50] agent said 'sir Super 200 ka price 999 hai' — Super 200 pricing was revised from 8-Feb-2024, agent quoted outdated figure.",
     "11": "[OBSERVATION] Raised correct complaint ticket and gave accurate 4-hour TAT.",
-    "12": "[DEDUCTION] Did not mention Playbox TV bundle. evidence: \"no agent utterance containing 'Playbox' or 'IPTV' found in transcript; customer is on Fusionnet plan where Playbox is bundled\"."
+    "12": "[DEDUCTION] Did not mention Playbox TV bundle. evidence: no agent utterance containing 'Playbox' or 'IPTV' found in transcript; customer is on Fusionnet plan where Playbox is bundled."
   },
   "summary": "Agent handled the call with correct verification and a proper complaint ticket. Main gaps were in probing depth, plan pricing accuracy, and personalisation.",
   "strengths": [
@@ -744,54 +746,112 @@ export async function evaluateTranscript(
 
   if (!text) throw new Error("All LLM providers failed.");
 
+  const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+  // Try strict parse first; if it fails (typically because the model emitted
+  // unescaped double-quotes inside a "remark" string value — a recurring
+  // issue with the EVIDENCE field), attempt a targeted repair that escapes
+  // stray quotes inside string values without mangling the JSON structure.
+  let result: QAResult;
   try {
-    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    const result = JSON.parse(cleanText) as QAResult;
-
-    // The model frequently hallucinates `weighted_score` (returns the same
-    // number across runs regardless of actual per-param scores). Recompute
-    // it deterministically from `result.scores` using the official weights.
-    // This is the single biggest source of run-to-run score variance.
-    const PARAM_WEIGHTS: Record<string, number> = {
-      "1": 3, "2": 8, "3": 3, "4": 3, "5": 5, "6": 3,
-      "7": 10, "8": 3, "9": 9, "10": 20, "11": 30, "12": 3,
-    };
-    if (result.scores) {
-      let totalWeight = 0;
-      let earnedWeight = 0;
-      for (const [k, v] of Object.entries(result.scores)) {
-        if (v === "NA" || v === null || v === undefined) continue;
-        const w = PARAM_WEIGHTS[k];
-        if (!w) continue;
-        const score = Number(v);
-        if (!Number.isFinite(score)) continue;
-        totalWeight += w;
-        earnedWeight += w * (score / 100);
-      }
-      const computed = totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-      const claimed = result.weighted_score;
-      if (typeof claimed === "number" && Math.abs(claimed - computed) > 0.5) {
-        console.warn(`[evaluateTranscript] Overriding hallucinated weighted_score: model claimed ${claimed}, computed ${computed.toFixed(1)} from per-param scores.`);
-      }
-      result.weighted_score = Math.round(computed * 10) / 10;
-
-      // Recompute overall_result from the corrected weighted_score using
-      // the same thresholds as Section 6 of the prompt.
-      if (!result.fatal_fail) {
-        const s = result.weighted_score;
-        result.overall_result =
-          s >= 90 ? "Excellent" :
-          s >= 75 ? "Good" :
-          s >= 60 ? "Average" :
-          s >= 40 ? "Below Average" : "Poor";
-      } else {
-        result.overall_result = "FAIL";
-      }
+    result = JSON.parse(cleanText) as QAResult;
+  } catch (firstErr) {
+    console.warn("[evaluateTranscript] Initial JSON.parse failed, attempting repair:", (firstErr as Error).message);
+    try {
+      result = JSON.parse(repairJsonStringQuotes(cleanText)) as QAResult;
+      console.warn("[evaluateTranscript] JSON repair succeeded.");
+    } catch (secondErr) {
+      console.error("Raw response:", text);
+      throw new Error("Failed to parse response as JSON (even after repair)");
     }
-
-    return result;
-  } catch (err) {
-    console.error("Raw response:", text);
-    throw new Error("Failed to parse response as JSON");
   }
+
+  // The model frequently hallucinates `weighted_score` (returns the same
+  // number across runs regardless of actual per-param scores). Recompute
+  // it deterministically from `result.scores` using the official weights.
+  // This is the single biggest source of run-to-run score variance.
+  const PARAM_WEIGHTS: Record<string, number> = {
+    "1": 3, "2": 8, "3": 3, "4": 3, "5": 5, "6": 3,
+    "7": 10, "8": 3, "9": 9, "10": 20, "11": 30, "12": 3,
+  };
+  if (result.scores) {
+    let totalWeight = 0;
+    let earnedWeight = 0;
+    for (const [k, v] of Object.entries(result.scores)) {
+      if (v === "NA" || v === null || v === undefined) continue;
+      const w = PARAM_WEIGHTS[k];
+      if (!w) continue;
+      const score = Number(v);
+      if (!Number.isFinite(score)) continue;
+      totalWeight += w;
+      earnedWeight += w * (score / 100);
+    }
+    const computed = totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
+    const claimed = result.weighted_score;
+    if (typeof claimed === "number" && Math.abs(claimed - computed) > 0.5) {
+      console.warn(`[evaluateTranscript] Overriding hallucinated weighted_score: model claimed ${claimed}, computed ${computed.toFixed(1)} from per-param scores.`);
+    }
+    result.weighted_score = Math.round(computed * 10) / 10;
+
+    // Recompute overall_result from the corrected weighted_score using
+    // the same thresholds as Section 6 of the prompt.
+    if (!result.fatal_fail) {
+      const s = result.weighted_score;
+      result.overall_result =
+        s >= 90 ? "Excellent" :
+        s >= 75 ? "Good" :
+        s >= 60 ? "Average" :
+        s >= 40 ? "Below Average" : "Poor";
+    } else {
+      result.overall_result = "FAIL";
+    }
+  }
+
+  return result;
+}
+
+// Heuristic JSON repair for the common LLM failure mode where unescaped
+// double-quote characters appear inside string values (e.g. evidence
+// quotes that the model wrapped in nested "..."). Walks the input
+// character-by-character, tracks string/non-string state, and escapes any
+// `"` that occurs inside a string value but is NOT followed by a JSON
+// structural character (, } ] : or end-of-input). Safe for the well-formed
+// keys/structure we expect from the model — only fixes errant quotes
+// inside the values themselves.
+function repairJsonStringQuotes(json: string): string {
+  let out = "";
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (escapeNext) {
+      out += ch;
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      if (!inString) {
+        out += ch;
+        inString = true;
+      } else {
+        let j = i + 1;
+        while (j < json.length && /\s/.test(json[j])) j++;
+        const next = json[j];
+        if (next === undefined || next === "," || next === "}" || next === "]" || next === ":") {
+          out += ch;
+          inString = false;
+        } else {
+          out += '\\"';
+        }
+      }
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
