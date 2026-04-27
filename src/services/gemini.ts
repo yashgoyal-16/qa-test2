@@ -721,10 +721,11 @@ export async function evaluateTranscript(
   const dynamicSystemPrompt = await getSystemPrompt();
 
   const fallbackChain = [
-    { name: "Z.AI GLM-4.7-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.7-flash") },
     { name: "Gemini 3.1 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-flash-lite-preview") },
-    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
+    { name: "Gemini 2.5 Flash", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-flash") },
     { name: "Gemini 2.5 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-2.5-pro") },
+    { name: "Z.AI GLM-4.7-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.7-flash") },
+    { name: "OpenAI GPT-4o", call: () => callOpenRouter(dynamicSystemPrompt, transcript, "openai/gpt-4o") },
     { name: "Z.AI GLM-4.5-Flash", call: () => callZAI(dynamicSystemPrompt, transcript, "glm-4.5-flash") },
     { name: "Gemini 3.1 Pro", call: () => callGemini(ai, dynamicSystemPrompt, transcript, "gemini-3.1-pro-preview") },
   ];
